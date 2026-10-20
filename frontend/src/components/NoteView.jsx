@@ -71,6 +71,8 @@ export const NoteView = () => {
   } = useApp();
 
   const editorRef = useRef(null);
+  const titleInputRef = useRef(null);
+  const loadedNoteIdRef = useRef(null);
   const imgInputRef = useRef(null);
   const linkInputRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -547,9 +549,19 @@ export const NoteView = () => {
     };
   }, [isInkActive, inkTool, inkColor, inkHlColor, inkSize, inkFinger, inkSel, handleNoteChanged]);
 
-  // Load active note body on note change
+  // Focus title automatically if newly created note with no title
+  useEffect(() => {
+    if (activeNote && !activeNote.title && !ro) {
+      titleInputRef.current?.focus();
+    }
+  }, [activeNoteId]);
+
+  // Load active note body ONLY when switching to a different note
   useEffect(() => {
     if (!activeNoteId || !editorRef.current) return;
+    if (loadedNoteIdRef.current === activeNoteId) return;
+    loadedNoteIdRef.current = activeNoteId;
+
     const body = loadNoteBody(activeNoteId);
     editorRef.current.innerHTML = body.html || '';
     hydrateInk(editorRef.current);
@@ -560,11 +572,16 @@ export const NoteView = () => {
     const isEmpty = !editorRef.current.textContent.trim() &&
       !editorRef.current.querySelector('li,hr,blockquote,pre,h1,h2,h3,img,div.ink');
     editorRef.current.classList.toggle('is-empty', isEmpty);
+  }, [activeNoteId, loadNoteBody, hydrateInk]);
 
-    // Click on checklist checkbox
+  // Handle checklist item toggles
+  useEffect(() => {
+    const edEl = editorRef.current;
+    if (!edEl) return;
+
     const handleChecklistClick = (e) => {
       const li = e.target.closest && e.target.closest('ul.checklist > li');
-      if (!li || !editorRef.current.contains(li) || e.target !== li) return;
+      if (!li || !edEl.contains(li) || e.target !== li) return;
       const r = li.getBoundingClientRect();
       if (e.clientX - r.left < 32 && e.clientY - r.top < 34) {
         li.setAttribute('data-checked', li.getAttribute('data-checked') === 'true' ? 'false' : 'true');
@@ -572,10 +589,9 @@ export const NoteView = () => {
       }
     };
 
-    const edEl = editorRef.current;
     edEl.addEventListener('click', handleChecklistClick);
     return () => edEl.removeEventListener('click', handleChecklistClick);
-  }, [activeNoteId, loadNoteBody, hydrateInk, handleNoteChanged]);
+  }, [handleNoteChanged]);
 
   if (!activeNote) {
     return (
@@ -1028,6 +1044,7 @@ ${pubAuthor ? `<div class="by">${avatarHtml}<span><b>${name}</b>${when ? ` • L
         </button>
         <div className="title-wrap">
           <input
+            ref={titleInputRef}
             className="title"
             id="noteTitle"
             value={activeNote.title || ''}
@@ -1041,6 +1058,13 @@ ${pubAuthor ? `<div class="by">${avatarHtml}<span><b>${name}</b>${when ? ` • L
               updateBoard({
                 notes: board.notes.map(n => n.id === activeNote.id ? { ...n, title: val } : n)
               });
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                titleInputRef.current?.blur();
+                editorRef.current?.focus();
+              }
             }}
           />
           <div className="byline">

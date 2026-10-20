@@ -212,6 +212,10 @@ export const AppProvider = ({ children }) => {
 
   // Debounce ref for note syncing
   const noteSaveTimers = useRef({});
+  const boardRef = useRef(board);
+  useEffect(() => {
+    boardRef.current = board;
+  }, [board]);
 
   const saveNoteBody = useCallback((noteId, html) => {
     if (!noteId) return;
@@ -222,7 +226,7 @@ export const AppProvider = ({ children }) => {
     } catch {}
 
     // Check if this note is shared and sync to share endpoint if permitted
-    const note = board.notes.find(n => n.id === noteId);
+    const note = boardRef.current?.notes?.find(n => n.id === noteId);
     if (note?.shared?.sid && (note.shared.own || note.shared.mode === 'edit')) {
       sharesAPI.updateShare(note.shared.sid, {
         content: { title: note.title, html }
@@ -236,7 +240,7 @@ export const AppProvider = ({ children }) => {
         notesAPI.updateNote(noteId, { html }).catch(() => {});
       }, 600);
     }
-  }, [getNoteKey, board.notes]);
+  }, [getNoteKey]);
 
   const deleteNoteBody = useCallback((noteId) => {
     delete noteCacheRef.current[noteId];
@@ -407,7 +411,12 @@ export const AppProvider = ({ children }) => {
     }
   }, [session, showToast]);
 
-  // Initialize and verify backend session on mount
+  const ingestShareRef = useRef(ingestShare);
+  useEffect(() => {
+    ingestShareRef.current = ingestShare;
+  }, [ingestShare]);
+
+  // Initialize and verify backend session on mount (once)
   useEffect(() => {
     const token = getToken();
     if (token) {
@@ -431,12 +440,12 @@ export const AppProvider = ({ children }) => {
             // Check if there is a pending share waiting
             const pending = sessionStorage.getItem('listbook:pending_share');
             if (pending) {
-              ingestShare(pending, res.user, normalized);
+              ingestShareRef.current(pending, res.user, normalized);
             }
           }).catch(() => {
             const pending = sessionStorage.getItem('listbook:pending_share');
             if (pending) {
-              ingestShare(pending, res.user);
+              ingestShareRef.current(pending, res.user);
             }
           });
         }
@@ -447,7 +456,7 @@ export const AppProvider = ({ children }) => {
         }
       });
     }
-  }, [ingestShare]);
+  }, []);
 
   // Handle share links in URL hash: #s.<sid> or #s.<owner>.<sid>
   useEffect(() => {
