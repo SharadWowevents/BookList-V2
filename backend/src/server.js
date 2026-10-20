@@ -43,6 +43,12 @@ app.use('/api/notes', noteRoutes);
 app.use('/api/shares', shareRoutes);
 app.use('/api/admin', adminRoutes);
 
+// Public view link redirect
+app.get('/p/:sid', (req, res) => {
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  res.redirect(`${clientUrl}/#p.${req.params.sid}`);
+});
+
 // 404 Handler
 app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.originalUrl} not found.` });

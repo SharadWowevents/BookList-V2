@@ -120,6 +120,7 @@ export const NoteView = () => {
 
   const [shareMode, setShareMode] = useState(() => activeNote?.shared?.mode || 'edit');
   const [shareSid, setShareSid] = useState(() => activeNote?.shared?.sid || '');
+  const [pubSid, setPubSid] = useState(() => activeNote?.shared?.sid || '');
 
   useEffect(() => {
     if (activeNote?.shared?.mode) {
@@ -127,6 +128,9 @@ export const NoteView = () => {
     }
     if (activeNote?.shared?.sid) {
       setShareSid(activeNote.shared.sid);
+      setPubSid(activeNote.shared.sid);
+    } else {
+      setPubSid('');
     }
   }, [activeNote?.id, activeNote?.shared?.mode, activeNote?.shared?.sid]);
 
@@ -949,6 +953,59 @@ ${pubAuthor ? `<div class="by">${avatarHtml}<span><b>${name}</b>${when ? ` • L
     setIsPublishing(false);
   };
 
+  const handleCreatePublicLink = async () => {
+    setIsPublishing(true);
+    try {
+      let sid = shareSid || activeNote?.shared?.sid;
+      if (!sid) {
+        const res = await sharesAPI.createShare({
+          itemId: activeNote.id,
+          kind: 'note',
+          mode: 'view'
+        });
+        sid = res.sid;
+        setShareSid(sid);
+      }
+      setPubSid(sid);
+      updateBoard({
+        notes: board.notes.map(n => n.id === activeNote.id ? {
+          ...n,
+          shared: { ...(n.shared || {}), sid, mode: n.shared?.mode || 'view', own: true, isPublic: true, ownerName: session?.name || 'You' }
+        } : n)
+      });
+      showToast('Public view link created!');
+    } catch {
+      showToast("Couldn't create public link.");
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const copyPublicLink = async () => {
+    const url = `${window.location.origin}${window.location.pathname}#p.${pubSid}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('Public link copied to clipboard.');
+    } catch {
+      showToast('Link: ' + url);
+    }
+  };
+
+  const handleStopPublishing = async () => {
+    try {
+      if (pubSid) {
+        await sharesAPI.deleteShare(pubSid);
+      }
+    } catch {}
+    setPubSid('');
+    setShareSid('');
+    updateBoard({
+      notes: board.notes.map(n => n.id === activeNote.id ? { ...n, shared: null } : n)
+    });
+    setUi(prev => ({ ...prev, publishing: false }));
+    showToast("Public link removed. Document is private again.");
+  };
+
   const handleShareModeChange = async (newMode) => {
     setShareMode(newMode);
     try {
@@ -1085,10 +1142,10 @@ ${pubAuthor ? `<div class="by">${avatarHtml}<span><b>${name}</b>${when ? ` • L
           {isOwn && (
             <button
               type="button"
-              className={`icon-btn ${ui.publishing ? 'shared-on' : ''}`}
+              className={`icon-btn ${ui.publishing || activeNote?.shared?.isPublic || pubSid ? 'shared-on' : ''}`}
               id="publishBtn"
-              title="Publish as a web page"
-              aria-label="Publish as a web page"
+              title={pubSid ? "Public view link (active)" : "Public view link"}
+              aria-label="Public view link"
               onClick={() => setUi(prev => ({ ...prev, publishing: !prev.publishing, sharing: false, confirm: false }))}
             >
               <GlobeIcon />
@@ -1120,7 +1177,7 @@ ${pubAuthor ? `<div class="by">${avatarHtml}<span><b>${name}</b>${when ? ` • L
       {ui.publishing && isOwn && (
         <div className="sheet" id="publishSheet">
           <div className="sheet-top">
-            Publish as a web page
+            Public view link
             <button
               type="button"
               className="icon-btn"
@@ -1131,44 +1188,102 @@ ${pubAuthor ? `<div class="by">${avatarHtml}<span><b>${name}</b>${when ? ` • L
             </button>
           </div>
           <p>
-            Saves this note as one web page file that opens in any browser, no login needed.
-            Upload it to your website or a free host like Netlify Drop, then share that link.
+            Publishes this note to a public view link that anyone can open in any browser, no login needed.
           </p>
-          <div className="field">
-            <label htmlFor="gaId">Google Analytics ID for view counts (optional)</label>
-            <input
-              className="input"
-              id="gaId"
-              placeholder="G-XXXXXXXXXX"
-              value={gaId}
-              onChange={(e) => {
-                setGaId(e.target.value.toUpperCase());
-                localStorage.setItem('listbook:ga', e.target.value.toUpperCase());
-              }}
-            />
+
+          {pubSid ? (
+            <>
+              <div className="link-row" style={{ marginTop: '12px' }}>
+                <input
+                  className="input"
+                  readOnly
+                  value={`${window.location.origin}${window.location.pathname}#p.${pubSid}`}
+                  aria-label="Public view link"
+                  onClick={(e) => e.target.select()}
+                />
+                <button
+                  type="button"
+                  className="pill ink"
+                  onClick={copyPublicLink}
+                  title="Copy public link"
+                  aria-label="Copy public link"
+                >
+                  <CopyIcon />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '10px' }}>
+                <a
+                  href={`${window.location.origin}${window.location.pathname}#p.${pubSid}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="pill plain"
+                  style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <EyeIcon size={14} /> Open public page
+                </a>
+                <button
+                  type="button"
+                  className="text-btn danger"
+                  onClick={handleStopPublishing}
+                  style={{ marginLeft: 'auto' }}
+                >
+                  Stop publishing
+                </button>
+              </div>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="pill ink pub-go"
+              id="doPublish"
+              disabled={isPublishing}
+              onClick={handleCreatePublicLink}
+              style={{ marginTop: '8px' }}
+            >
+              <GlobeIcon />
+              <span>{isPublishing ? 'Creating link…' : 'Create public view link'}</span>
+            </button>
+          )}
+
+          <div style={{ marginTop: '16px', borderTop: '1px solid var(--line)', paddingTop: '12px' }}>
+            <div className="field">
+              <label htmlFor="gaId">Google Analytics ID for view counts (optional)</label>
+              <input
+                className="input"
+                id="gaId"
+                placeholder="G-XXXXXXXXXX"
+                value={gaId}
+                onChange={(e) => {
+                  setGaId(e.target.value.toUpperCase());
+                  localStorage.setItem('listbook:ga', e.target.value.toUpperCase());
+                }}
+              />
+            </div>
+            <label className="chk">
+              <input
+                type="checkbox"
+                id="pubAuthor"
+                checked={pubAuthor}
+                onChange={(e) => {
+                  setPubAuthor(e.target.checked);
+                  localStorage.setItem('listbook:pubAuthor', JSON.stringify(e.target.checked));
+                }}
+              />
+              Show my name, photo and last-updated time
+            </label>
+            <div style={{ marginTop: '14px' }}>
+              <button
+                type="button"
+                className="pill plain"
+                style={{ fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                onClick={handlePublishNote}
+                title="Download an offline copy as an HTML file"
+              >
+                <DownloadIcon size={14} /> Download offline HTML backup
+              </button>
+            </div>
           </div>
-          <label className="chk">
-            <input
-              type="checkbox"
-              id="pubAuthor"
-              checked={pubAuthor}
-              onChange={(e) => {
-                setPubAuthor(e.target.checked);
-                localStorage.setItem('listbook:pubAuthor', JSON.stringify(e.target.checked));
-              }}
-            />
-            Show my name, photo and last-updated time
-          </label>
-          <button
-            type="button"
-            className="pill ink pub-go"
-            id="doPublish"
-            disabled={isPublishing}
-            onClick={handlePublishNote}
-          >
-            <DownloadIcon />
-            <span>{isPublishing ? 'Preparing…' : 'Download web page'}</span>
-          </button>
         </div>
       )}
 
