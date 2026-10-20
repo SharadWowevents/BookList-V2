@@ -20,3 +20,18 @@ export const starterBoard = () => {
   return { lists: [l1, l2, l3], activeId: l1.id, notes: [], activeNoteId: null, tab: "lists", updatedAt: Date.now() };
 };
 
+export const reorderSubset = (arr, ids) => {
+  const set = new Set(ids);
+  const slots = [];
+  arr.forEach((x, i) => { if (set.has(x.id)) slots.push(i); });
+  const byId = Object.fromEntries(arr.map(x => [x.id, x]));
+  const out = arr.slice();
+  slots.forEach((slot, k) => {
+    if (byId[ids[k]]) {
+      out[slot] = byId[ids[k]];
+    }
+  });
+  return out;
+};
+
+

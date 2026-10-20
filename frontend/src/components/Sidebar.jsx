@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
+import Sortable from 'sortablejs';
 import { useApp } from '../context/AppContext';
-import { ACCENTS, uid } from '../utils/constants';
+import { ACCENTS, uid, reorderSubset } from '../utils/constants';
 import {
   PlusIcon, StarIcon, GripIcon, PanelIcon, ListPlusIcon, NotePlusIcon,
   ListsIcon, NotesIcon, GearIcon, SunIcon, MoonIcon, MonitorIcon,
@@ -67,33 +68,62 @@ export const Sidebar = () => {
     });
   };
 
-  // Reorder items via drag & drop
-  const [draggedItemId, setDraggedItemId] = useState(null);
+  // Reorder items via SortableJS
+  const starredGroupRef = useRef(null);
+  const othersGroupRef = useRef(null);
+  const sortablesRef = useRef([]);
+  const boardRef = useRef(board);
+  useEffect(() => {
+    boardRef.current = board;
+  }, [board]);
 
-  const handleDragStart = (e, id) => {
-    setDraggedItemId(id);
-    e.dataTransfer.effectAllowed = 'move';
-  };
+  useEffect(() => {
+    sortablesRef.current.forEach(s => s.destroy());
+    sortablesRef.current = [];
 
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
+    const isList = board.tab === 'lists';
+    const listKey = isList ? 'lists' : 'notes';
 
-  const handleDrop = (e, targetId, kind) => {
-    e.preventDefault();
-    if (!draggedItemId || draggedItemId === targetId) return;
-    const listKey = kind === 'list' ? 'lists' : 'notes';
-    const items = [...board[listKey]];
-    const fromIdx = items.findIndex(x => x.id === draggedItemId);
-    const toIdx = items.findIndex(x => x.id === targetId);
-    if (fromIdx >= 0 && toIdx >= 0) {
-      const [moved] = items.splice(fromIdx, 1);
-      items.splice(toIdx, 0, moved);
-      updateBoard({ [listKey]: items });
+    const opts = {
+      animation: 160,
+      handle: '.grip',
+      delay: 180,
+      delayOnTouchOnly: true,
+      touchStartThreshold: 6,
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      dragClass: 'sortable-drag',
+      onEnd(evt) {
+        const { from, oldIndex, newIndex } = evt;
+        if (oldIndex == null || newIndex == null || oldIndex === newIndex) return;
+
+        // 1. Capture new order of IDs from the DOM before revert
+        const ids = Array.from(from.children).map(c => c.dataset.id).filter(Boolean);
+
+        // 2. Revert DOM mutation so React can cleanly reconcile without VDOM desync
+        const item = evt.item;
+        const targetNode = from.children[oldIndex > newIndex ? oldIndex + 1 : oldIndex];
+        from.insertBefore(item, targetNode || null);
+
+        // 3. Update React board state
+        const currentArr = boardRef.current[listKey];
+        const reordered = reorderSubset(currentArr, ids);
+        updateBoard({ [listKey]: reordered });
+      }
+    };
+
+    if (starredGroupRef.current) {
+      sortablesRef.current.push(Sortable.create(starredGroupRef.current, opts));
     }
-    setDraggedItemId(null);
-  };
+    if (othersGroupRef.current) {
+      sortablesRef.current.push(Sortable.create(othersGroupRef.current, opts));
+    }
+
+    return () => {
+      sortablesRef.current.forEach(s => s.destroy());
+      sortablesRef.current = [];
+    };
+  }, [board.tab, board.lists, board.notes, updateBoard]);
 
   const handlePhotoUpload = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -150,10 +180,7 @@ export const Sidebar = () => {
       return (
         <div
           className={`list-row ${isActive ? 'active' : ''}`}
-          draggable
-          onDragStart={(e) => handleDragStart(e, item.id)}
-          onDragOver={handleDragOver}
-          onDrop={(e) => handleDrop(e, item.id, isList ? 'lists' : 'notes')}
+          data-id={item.id}
           onClick={() => {
             updateBoard({
               [isList ? 'activeId' : 'activeNoteId']: item.id,
@@ -162,7 +189,7 @@ export const Sidebar = () => {
             setUi(prev => ({ ...prev, viewing: true, admin: false, confirm: false, sharing: false, publishing: false }));
           }}
         >
-          <span className="grip" aria-hidden="true"><GripIcon /></span>
+          <span className="grip" aria-hidden="true" title="Drag to reorder"><GripIcon /></span>
           <button className="list-open" type="button">
             <span className={`list-name ${!isList && !item.title ? 'untitled' : ''}`}>
               {label}
@@ -192,15 +219,19 @@ export const Sidebar = () => {
     return (
       <>
         {starred.length > 0 && <div className="sec-label">Starred</div>}
-        <div className="group">
-          {starred.map(item => <ItemRow key={item.id} item={item} />)}
-        </div>
+        {starred.length > 0 && (
+          <div className="group" ref={starredGroupRef}>
+            {starred.map(item => <ItemRow key={item.id} item={item} />)}
+          </div>
+        )}
         {starred.length > 0 && others.length > 0 && (
           <div className="sec-label">{isList ? 'Lists' : 'Notes'}</div>
         )}
-        <div className="group">
-          {others.map(item => <ItemRow key={item.id} item={item} />)}
-        </div>
+        {others.length > 0 && (
+          <div className="group" ref={othersGroupRef}>
+            {others.map(item => <ItemRow key={item.id} item={item} />)}
+          </div>
+        )}
         {items.length === 0 && (
           <p className="side-empty">
             {kind === 'list'

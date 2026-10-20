@@ -136,6 +136,7 @@ svg{display:block}
 .count{font-size:.95rem;color:var(--muted);font-variant-numeric:tabular-nums}
 .side-empty{padding:18px 12px;color:var(--muted);font-size:1.05rem;line-height:1.5}
 .grip{width:28px;height:44px;display:grid;place-items:center;color:var(--muted);opacity:.45;cursor:grab;touch-action:none;flex:none}
+.grip:hover{opacity:.85;color:var(--ink)}
 .grip:active{cursor:grabbing}
 .icon-btn{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;color:var(--muted);flex:none}
 .icon-btn:hover{background:var(--soft);color:var(--ink)}

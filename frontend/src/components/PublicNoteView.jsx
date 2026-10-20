@@ -154,7 +154,7 @@ export const PublicNoteView = ({ sid, onExit }) => {
 
   return (
     <div className="pub-page">
-      <header className="pub-nav">
+      {/* <header className="pub-nav">
         <div className="pub-brand">
           My<span>Deepwork</span>
         </div>
@@ -175,7 +175,7 @@ export const PublicNoteView = ({ sid, onExit }) => {
             </button>
           )}
         </div>
-      </header>
+      </header> */}
 
       <main className="pub-main">
         <h1 className="pub-title">{title}</h1>
@@ -196,11 +196,6 @@ export const PublicNoteView = ({ sid, onExit }) => {
 
         <footer className="pub-foot">
           <span>Published with <b>MyDeepwork</b></span>
-          {onExit && (
-            <button type="button" className="link" onClick={onExit} style={{ color: 'inherit', cursor: 'pointer' }}>
-              Create your own documents →
-            </button>
-          )}
         </footer>
       </main>
     </div>

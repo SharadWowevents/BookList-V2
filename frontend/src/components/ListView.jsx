@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import Sortable from 'sortablejs';
 import { useApp } from '../context/AppContext';
-import { uid } from '../utils/constants';
+import { uid, reorderSubset } from '../utils/constants';
 import { sharesAPI } from '../services/api';
 import {
   BackIcon, ShareIcon, TrashIcon, CheckIcon, StarIcon, XIcon,
@@ -27,6 +28,85 @@ export const ListView = () => {
 
   const [shareMode, setShareMode] = useState(() => activeList?.shared?.mode || 'edit');
   const [shareSid, setShareSid] = useState(() => activeList?.shared?.sid || '');
+
+  const updateListTodos = useCallback((newTodos) => {
+    if (!activeList || ro) return;
+    updateBoard({
+      lists: board.lists.map(l => l.id === activeList.id ? { ...l, todos: newTodos } : l)
+    });
+    if (shareSid && canEdit) {
+      sharesAPI.updateShare(shareSid, { content: { name: activeList.name, todos: newTodos } }).catch(() => {});
+    }
+  }, [activeList, ro, updateBoard, board.lists, shareSid, canEdit]);
+
+  // Drag and drop todos with SortableJS
+  const sOpenGroupRef = useRef(null);
+  const openGroupRef = useRef(null);
+  const doneGroupRef = useRef(null);
+  const todoSortablesRef = useRef([]);
+
+  const activeListRef = useRef(activeList);
+  const updateListTodosRef = useRef(updateListTodos);
+
+  useEffect(() => {
+    activeListRef.current = activeList;
+  }, [activeList]);
+
+  useEffect(() => {
+    updateListTodosRef.current = updateListTodos;
+  }, [updateListTodos]);
+
+  useEffect(() => {
+    todoSortablesRef.current.forEach(s => s.destroy());
+    todoSortablesRef.current = [];
+
+    if (!activeList || ro) return;
+
+    const opts = {
+      animation: 160,
+      delay: 180,
+      delayOnTouchOnly: true,
+      touchStartThreshold: 6,
+      filter: ".todo-edit, .check, .star-btn, .del",
+      preventOnFilter: false,
+      ghostClass: "sortable-ghost",
+      chosenClass: "sortable-chosen",
+      dragClass: "sortable-drag",
+      onEnd(evt) {
+        const { from, oldIndex, newIndex } = evt;
+        if (oldIndex == null || newIndex == null || oldIndex === newIndex) return;
+
+        // 1. Capture new order of IDs
+        const ids = Array.from(from.children).map(c => c.dataset.id).filter(Boolean);
+
+        // 2. Revert DOM mutation so React can cleanly reconcile without VDOM desync
+        const item = evt.item;
+        const targetNode = from.children[oldIndex > newIndex ? oldIndex + 1 : oldIndex];
+        from.insertBefore(item, targetNode || null);
+
+        // 3. Update active list todos
+        if (activeListRef.current?.todos) {
+          const reordered = reorderSubset(activeListRef.current.todos, ids);
+          updateListTodosRef.current(reordered);
+        }
+      }
+    };
+
+    if (sOpenGroupRef.current) {
+      todoSortablesRef.current.push(Sortable.create(sOpenGroupRef.current, opts));
+    }
+    if (openGroupRef.current) {
+      todoSortablesRef.current.push(Sortable.create(openGroupRef.current, opts));
+    }
+    if (doneGroupRef.current && ui.showDone) {
+      todoSortablesRef.current.push(Sortable.create(doneGroupRef.current, opts));
+    }
+
+    return () => {
+      todoSortablesRef.current.forEach(s => s.destroy());
+      todoSortablesRef.current = [];
+    };
+  }, [activeList?.id, activeList?.todos, ro, ui.showDone, activeList]);
 
   useEffect(() => {
     if (activeList?.shared?.mode) setShareMode(activeList.shared.mode);
@@ -65,16 +145,6 @@ export const ListView = () => {
       </>
     );
   }
-
-  const updateListTodos = (newTodos) => {
-    if (ro) return;
-    updateBoard({
-      lists: board.lists.map(l => l.id === activeList.id ? { ...l, todos: newTodos } : l)
-    });
-    if (shareSid && canEdit) {
-      sharesAPI.updateShare(shareSid, { content: { name: activeList.name, todos: newTodos } }).catch(() => {});
-    }
-  };
 
   const handleTitleChange = (e) => {
     if (ro) return;
@@ -224,34 +294,6 @@ export const ListView = () => {
     showToast(isSharedNonOwner ? 'Removed from your lists.' : `List “${listName}” deleted.`);
   };
 
-  // Drag and drop todos
-  const handleTodoDragStart = (e, id) => {
-    if (ro) return;
-    setDraggedTodoId(id);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleTodoDragOver = (e) => {
-    if (ro) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  const handleTodoDrop = (e, targetId) => {
-    if (ro) return;
-    e.preventDefault();
-    if (!draggedTodoId || draggedTodoId === targetId) return;
-    const todos = [...activeList.todos];
-    const fromIdx = todos.findIndex(t => t.id === draggedTodoId);
-    const toIdx = todos.findIndex(t => t.id === targetId);
-    if (fromIdx >= 0 && toIdx >= 0) {
-      const [moved] = todos.splice(fromIdx, 1);
-      todos.splice(toIdx, 0, moved);
-      updateListTodos(todos);
-    }
-    setDraggedTodoId(null);
-  };
-
   // Move todo to another list
   const handleDropOnList = (e, targetListId) => {
     if (ro) return;
@@ -366,11 +408,8 @@ export const ListView = () => {
     return (
       <div
         key={t.id}
+        data-id={t.id}
         className={`todo ${t.done ? 'done' : ''}`}
-        draggable={!ro}
-        onDragStart={(e) => !ro && handleTodoDragStart(e, t.id)}
-        onDragOver={ro ? undefined : handleTodoDragOver}
-        onDrop={(e) => !ro && handleTodoDrop(e, t.id)}
       >
         <button
           type="button"
@@ -608,14 +647,18 @@ export const ListView = () => {
           )}
 
           {sOpen.length > 0 && <div className="sec-label">Starred</div>}
-          <div className="group">
-            {sOpen.map(renderTodoRow)}
-          </div>
+          {sOpen.length > 0 && (
+            <div className="group" ref={sOpenGroupRef}>
+              {sOpen.map(renderTodoRow)}
+            </div>
+          )}
 
           {sOpen.length > 0 && open.length > 0 && <div className="sec-label">Todos</div>}
-          <div className="group">
-            {open.map(renderTodoRow)}
-          </div>
+          {open.length > 0 && (
+            <div className="group" ref={openGroupRef}>
+              {open.map(renderTodoRow)}
+            </div>
+          )}
 
           {done.length > 0 && (
             <>
@@ -627,7 +670,7 @@ export const ListView = () => {
                 {ui.showDone ? <ChevronDownIcon /> : <ChevronRightIcon />} Done · {done.length}
               </button>
               {ui.showDone && (
-                <div className="group">
+                <div className="group" ref={doneGroupRef}>
                   {done.map(renderTodoRow)}
                 </div>
               )}
