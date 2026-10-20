@@ -15,7 +15,7 @@ const Shell = () => {
     <div className={`app ${ui.viewing ? 'viewing' : ''} ${ui.collapsed ? 'collapsed' : ''}`}>
       <Sidebar />
       <main className="main">
-        {ui.admin ? (
+        {ui.admin && session?.role === 'admin' ? (
           <AdminPanel />
         ) : board.tab === 'lists' ? (
           <ListView key={board.activeId} />

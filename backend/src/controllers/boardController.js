@@ -16,12 +16,14 @@ export const getBoard = async (req, res) => {
         id: l.id,
         name: l.name,
         starred: l.starred,
-        todos: l.todos
+        todos: l.todos,
+        shared: l.shared || null
       })),
       notes: notes.map(n => ({
         id: n.id,
         title: n.title,
-        starred: n.starred
+        starred: n.starred,
+        shared: n.shared || null
       })),
       activeId: user.activeId || (lists[0] ? lists[0].id : null),
       activeNoteId: user.activeNoteId || (notes[0] ? notes[0].id : null),
@@ -51,7 +53,8 @@ export const syncBoard = async (req, res) => {
             name: item.name || 'Untitled list',
             starred: !!item.starred,
             order: i,
-            todos: item.todos || []
+            todos: item.todos || [],
+            shared: item.shared || null
           },
           { upsert: true, new: true }
         );
@@ -71,7 +74,8 @@ export const syncBoard = async (req, res) => {
             $set: {
               title: item.title || '',
               starred: !!item.starred,
-              order: i
+              order: i,
+              shared: item.shared || null
             }
           },
           { upsert: true }

@@ -46,6 +46,10 @@ const listSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  shared: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  },
   todos: [todoSchema]
 }, {
   timestamps: true

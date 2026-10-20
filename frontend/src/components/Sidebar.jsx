@@ -15,6 +15,8 @@ export const Sidebar = () => {
     showToast
   } = useApp();
 
+  const isAdmin = session?.role === 'admin';
+
   const [newListName, setNewListName] = useState('');
   const menuRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -292,15 +294,17 @@ export const Sidebar = () => {
       </div>
 
       <div className="menu-sep"></div>
-      <button
-        type="button"
-        className="menu-item"
-        onClick={() => {
-          setUi(prev => ({ ...prev, menu: false, admin: true, viewing: true }));
-        }}
-      >
-        <ShieldIcon /> Admin · People
-      </button>
+      {isAdmin && (
+        <button
+          type="button"
+          className="menu-item"
+          onClick={() => {
+            setUi(prev => ({ ...prev, menu: false, admin: true, viewing: true }));
+          }}
+        >
+          <ShieldIcon /> Admin · People
+        </button>
+      )}
       <button
         type="button"
         className="menu-item"
@@ -368,15 +372,17 @@ export const Sidebar = () => {
         >
           <NotesIcon />
         </button>
-        <button
-          type="button"
-          className={`hbtn ${ui.admin ? 'on' : ''}`}
-          title="Admin · People"
-          aria-label="Admin page"
-          onClick={() => setUi(prev => ({ ...prev, admin: true, viewing: true }))}
-        >
-          <ShieldIcon />
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            className={`hbtn ${ui.admin ? 'on' : ''}`}
+            title="Admin · People"
+            aria-label="Admin page"
+            onClick={() => setUi(prev => ({ ...prev, admin: true, viewing: true }))}
+          >
+            <ShieldIcon />
+          </button>
+        )}
         <span className="rail-spacer"></span>
         <button
           type="button"
@@ -423,15 +429,17 @@ export const Sidebar = () => {
             >
               <NotePlusIcon />
             </button>
-            <button
-              type="button"
-              className={`hbtn ${ui.admin ? 'on' : ''}`}
-              title="Admin · People"
-              aria-label="Admin page"
-              onClick={() => setUi(prev => ({ ...prev, admin: true, viewing: true }))}
-            >
-              <ShieldIcon />
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                className={`hbtn ${ui.admin ? 'on' : ''}`}
+                title="Admin · People"
+                aria-label="Admin page"
+                onClick={() => setUi(prev => ({ ...prev, admin: true, viewing: true }))}
+              >
+                <ShieldIcon />
+              </button>
+            )}
             <button
               type="button"
               className="hbtn collapse-btn"

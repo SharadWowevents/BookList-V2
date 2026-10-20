@@ -28,6 +28,10 @@ const noteSchema = new mongoose.Schema({
   order: {
     type: Number,
     default: 0
+  },
+  shared: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
   }
 }, {
   timestamps: true

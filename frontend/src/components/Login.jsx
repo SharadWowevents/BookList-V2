@@ -15,7 +15,7 @@ async function sha256(str) {
 }
 
 export const Login = () => {
-  const { setSession, showToast } = useApp();
+  const { setSession, showToast, pendingShareSid } = useApp();
 
   const [mode, setMode] = useState('local');
   const [name, setName] = useState('');
@@ -130,7 +130,9 @@ export const Login = () => {
           <div className="brand">My<span>Deepwork</span></div>
         </div>
         <p className="tag">
-          Lists, todos and notes in the order you want them. Star what matters and it stays on top.
+          {pendingShareSid
+            ? 'Someone shared a list or note with you. Sign in to open it.'
+            : 'Lists, todos and notes in the order you want them. Star what matters and it stays on top.'}
         </p>
 
         {mode === 'local' ? (

@@ -74,6 +74,20 @@ export const AppProvider = ({ children }) => {
     collapsed
   }));
 
+  const [pendingShareSid, setPendingShareSid] = useState(() => {
+    try {
+      const hash = window.location.hash || '';
+      const m = /^#s\.(?:([A-Za-z0-9_-]+)\.)?([a-z0-9]+)$/i.exec(hash);
+      if (m && m[2] && m[2] !== 'local') {
+        sessionStorage.setItem('listbook:pending_share', m[2]);
+        return m[2];
+      }
+      return sessionStorage.getItem('listbook:pending_share') || null;
+    } catch {
+      return null;
+    }
+  });
+
   const setCollapsed = useCallback((val) => {
     setCollapsedState(val);
     setUi(prev => ({ ...prev, collapsed: val }));
@@ -259,6 +273,136 @@ export const AppProvider = ({ children }) => {
     });
   }, [session]);
 
+  const ingestShare = useCallback(async (sid, targetSession = session, baseBoard = null) => {
+    if (!sid || sid === 'local') return;
+    try {
+      const share = await sharesAPI.getShare(sid);
+      if (!share) return;
+
+      // Clear pending storage & hash
+      try { sessionStorage.removeItem('listbook:pending_share'); } catch {}
+      try {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      } catch {
+        try { window.location.hash = ''; } catch {}
+      }
+      setPendingShareSid(null);
+
+      const isOwn = !!share.own;
+      const canEdit = isOwn || share.mode === 'edit';
+      const sess = targetSession || session;
+
+      setBoardState(prev => {
+        const current = baseBoard || prev;
+
+        if (share.kind === 'note') {
+          const existing = current.notes.find(n => n.shared?.sid === sid || n.id === share.itemId);
+          const noteId = existing ? existing.id : (share.itemId || ('shared_' + sid));
+          const noteItem = {
+            id: noteId,
+            title: share.content?.title || 'Shared note',
+            starred: existing ? existing.starred : false,
+            shared: {
+              sid,
+              mode: share.mode,
+              own: isOwn,
+              ownerName: share.ownerName
+            },
+            canEdit
+          };
+
+          // Save note body to cache and localStorage
+          if (share.content?.html !== undefined) {
+            const rec = { html: share.content.html, updatedAt: Date.now() };
+            noteCacheRef.current[noteId] = rec;
+            const key = sess ? `listbook:note:${sess.username || sess.key || sess.id}:${noteId}` : `listbook:note:anon:${noteId}`;
+            try { localStorage.setItem(key, JSON.stringify(rec)); } catch {}
+          }
+
+          const updatedNotes = existing
+            ? current.notes.map(n => n.id === noteId ? noteItem : n)
+            : [noteItem, ...current.notes];
+
+          const nextBoard = {
+            ...current,
+            tab: 'notes',
+            activeNoteId: noteId,
+            notes: updatedNotes
+          };
+
+          if (sess) {
+            const key = `listbook:board:${sess.username || sess.key || sess.id || 'default'}`;
+            try { localStorage.setItem(key, JSON.stringify(nextBoard)); } catch {}
+
+            if (getToken()) {
+              boardAPI.syncBoard({
+                lists: nextBoard.lists,
+                notes: nextBoard.notes,
+                activeId: nextBoard.activeId,
+                activeNoteId: nextBoard.activeNoteId,
+                tab: nextBoard.tab
+              }).catch(() => {});
+            }
+          }
+
+          return nextBoard;
+        } else {
+          // List
+          const existing = current.lists.find(l => l.shared?.sid === sid || l.id === share.itemId);
+          const listId = existing ? existing.id : (share.itemId || ('shared_' + sid));
+          const listItem = {
+            id: listId,
+            name: share.content?.name || 'Shared list',
+            todos: Array.isArray(share.content?.todos) ? share.content.todos : [],
+            starred: existing ? existing.starred : false,
+            shared: {
+              sid,
+              mode: share.mode,
+              own: isOwn,
+              ownerName: share.ownerName
+            },
+            canEdit
+          };
+
+          const updatedLists = existing
+            ? current.lists.map(l => l.id === listId ? listItem : l)
+            : [listItem, ...current.lists];
+
+          const nextBoard = {
+            ...current,
+            tab: 'lists',
+            activeId: listId,
+            lists: updatedLists
+          };
+
+          if (sess) {
+            const key = `listbook:board:${sess.username || sess.key || sess.id || 'default'}`;
+            try { localStorage.setItem(key, JSON.stringify(nextBoard)); } catch {}
+
+            if (getToken()) {
+              boardAPI.syncBoard({
+                lists: nextBoard.lists,
+                notes: nextBoard.notes,
+                activeId: nextBoard.activeId,
+                activeNoteId: nextBoard.activeNoteId,
+                tab: nextBoard.tab
+              }).catch(() => {});
+            }
+          }
+
+          return nextBoard;
+        }
+      });
+
+      setUi(prev => ({ ...prev, viewing: true, admin: false }));
+      showToast(`Added to your ${share.kind === 'note' ? 'notes' : 'lists'}. ${canEdit ? 'You can edit it.' : 'You can view it.'}`);
+    } catch (err) {
+      console.error('Failed to ingest share:', err);
+      try { sessionStorage.removeItem('listbook:pending_share'); } catch {}
+      showToast('This shared item no longer exists or the link has expired.', 4500);
+    }
+  }, [session, showToast]);
+
   // Initialize and verify backend session on mount
   useEffect(() => {
     const token = getToken();
@@ -272,13 +416,25 @@ export const AppProvider = ({ children }) => {
 
           // Fetch board from MongoDB
           boardAPI.getBoard().then(remoteBoard => {
+            let normalized = starterBoard();
             if (remoteBoard && Array.isArray(remoteBoard.lists)) {
-              const normalized = normalizeBoard(remoteBoard);
+              normalized = normalizeBoard(remoteBoard);
               setBoardState(normalized);
               const key = `listbook:board:${res.user.username || res.user.id}`;
               try { localStorage.setItem(key, JSON.stringify(normalized)); } catch {}
             }
-          }).catch(() => {});
+
+            // Check if there is a pending share waiting
+            const pending = sessionStorage.getItem('listbook:pending_share');
+            if (pending) {
+              ingestShare(pending, res.user, normalized);
+            }
+          }).catch(() => {
+            const pending = sessionStorage.getItem('listbook:pending_share');
+            if (pending) {
+              ingestShare(pending, res.user);
+            }
+          });
         }
       }).catch(err => {
         if (err.status === 401 || err.status === 403) {
@@ -287,11 +443,11 @@ export const AppProvider = ({ children }) => {
         }
       });
     }
-  }, []);
+  }, [ingestShare]);
 
   // Handle share links in URL hash: #s.<sid> or #s.<owner>.<sid>
   useEffect(() => {
-    const handleHash = async () => {
+    const handleHash = () => {
       const hash = window.location.hash;
       if (!hash) return;
       const m = /^#s\.(?:([A-Za-z0-9_-]+)\.)?([a-z0-9]+)$/i.exec(hash);
@@ -299,121 +455,66 @@ export const AppProvider = ({ children }) => {
       const sid = m[2];
       if (!sid || sid === 'local') return;
 
-      try {
-        const share = await sharesAPI.getShare(sid);
-        if (!share) return;
-
-        // Clear hash from URL so it doesn't loop
-        try {
-          window.history.replaceState(null, '', window.location.pathname + window.location.search);
-        } catch {
-          window.location.hash = '';
-        }
-
-        const isOwn = !!share.own;
-        const canEdit = isOwn || share.mode === 'edit';
-
-        if (share.kind === 'note') {
-          setBoardState(prev => {
-            const existing = prev.notes.find(n => n.shared?.sid === sid || n.id === share.itemId);
-            const noteId = existing ? existing.id : (share.itemId || ('shared_' + sid));
-            const noteItem = {
-              id: noteId,
-              title: share.content?.title || 'Shared note',
-              starred: existing ? existing.starred : false,
-              shared: {
-                sid,
-                mode: share.mode,
-                own: isOwn,
-                ownerName: share.ownerName
-              },
-              canEdit
-            };
-
-            // Save note body to cache
-            if (share.content?.html !== undefined) {
-              const rec = { html: share.content.html, updatedAt: Date.now() };
-              noteCacheRef.current[noteId] = rec;
-              try { localStorage.setItem(getNoteKey(noteId), JSON.stringify(rec)); } catch {}
-            }
-
-            const updatedNotes = existing
-              ? prev.notes.map(n => n.id === noteId ? noteItem : n)
-              : [noteItem, ...prev.notes];
-
-            return {
-              ...prev,
-              tab: 'notes',
-              activeNoteId: noteId,
-              notes: updatedNotes
-            };
-          });
-
-          setUi(prev => ({ ...prev, viewing: true }));
-          showToast(`Opened shared note. ${canEdit ? 'You can edit it.' : 'You can view it.'}`);
-        } else {
-          // List
-          setBoardState(prev => {
-            const existing = prev.lists.find(l => l.shared?.sid === sid || l.id === share.itemId);
-            const listId = existing ? existing.id : (share.itemId || ('shared_' + sid));
-            const listItem = {
-              id: listId,
-              name: share.content?.name || 'Shared list',
-              todos: Array.isArray(share.content?.todos) ? share.content.todos : [],
-              starred: existing ? existing.starred : false,
-              shared: {
-                sid,
-                mode: share.mode,
-                own: isOwn,
-                ownerName: share.ownerName
-              },
-              canEdit
-            };
-
-            const updatedLists = existing
-              ? prev.lists.map(l => l.id === listId ? listItem : l)
-              : [listItem, ...prev.lists];
-
-            return {
-              ...prev,
-              tab: 'lists',
-              activeId: listId,
-              lists: updatedLists
-            };
-          });
-
-          setUi(prev => ({ ...prev, viewing: true }));
-          showToast(`Opened shared list. ${canEdit ? 'You can edit it.' : 'You can view it.'}`);
-        }
-      } catch (err) {
-        console.error('Failed to open shared link:', err);
-        showToast('This shared item no longer exists or the link has expired.', 4500);
+      if (!session) {
+        // User not logged in: stash pending share for login screen
+        try { sessionStorage.setItem('listbook:pending_share', sid); } catch {}
+        setPendingShareSid(sid);
+      } else {
+        // User is logged in: ingest immediately
+        ingestShare(sid);
       }
     };
 
     handleHash();
     window.addEventListener('hashchange', handleHash);
     return () => window.removeEventListener('hashchange', handleHash);
-  }, [getNoteKey, showToast]);
+  }, [session, ingestShare]);
 
   const setSession = useCallback((sess) => {
     setSessionState(sess);
     if (sess) {
       try {
         localStorage.setItem('listbook:session', JSON.stringify(sess));
-        const key = `listbook:board:${sess.username || sess.key || 'default'}`;
+        const key = `listbook:board:${sess.username || sess.key || sess.id || 'default'}`;
         const saved = localStorage.getItem(key);
-        const b = saved ? normalizeBoard(JSON.parse(saved)) : starterBoard();
+        let b = saved ? normalizeBoard(JSON.parse(saved)) : starterBoard();
         setBoardState(b);
         localStorage.setItem(key, JSON.stringify(b));
         if (sess.photo) setPhotoState(sess.photo);
+
+        // Fetch user board from backend and process any pending share
+        if (getToken()) {
+          boardAPI.getBoard().then(remoteBoard => {
+            let activeBoard = b;
+            if (remoteBoard && Array.isArray(remoteBoard.lists)) {
+              activeBoard = normalizeBoard(remoteBoard);
+              setBoardState(activeBoard);
+              try { localStorage.setItem(key, JSON.stringify(activeBoard)); } catch {}
+            }
+
+            const pending = sessionStorage.getItem('listbook:pending_share');
+            if (pending) {
+              ingestShare(pending, sess, activeBoard);
+            }
+          }).catch(() => {
+            const pending = sessionStorage.getItem('listbook:pending_share');
+            if (pending) {
+              ingestShare(pending, sess, b);
+            }
+          });
+        } else {
+          const pending = sessionStorage.getItem('listbook:pending_share');
+          if (pending) {
+            ingestShare(pending, sess, b);
+          }
+        }
       } catch {}
     } else {
       setToken(null);
       try { localStorage.removeItem('listbook:session'); } catch {}
       setPhotoState(null);
     }
-  }, []);
+  }, [ingestShare]);
 
   const signOut = useCallback((msg) => {
     setToken(null);
@@ -459,7 +560,9 @@ export const AppProvider = ({ children }) => {
       triggerUndo,
       loadNoteBody,
       saveNoteBody,
-      deleteNoteBody
+      deleteNoteBody,
+      pendingShareSid,
+      ingestShare
     }}>
       {children}
     </AppContext.Provider>

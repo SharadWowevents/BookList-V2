@@ -18,7 +18,17 @@ const suggestUsername = (name) =>
   name.toLowerCase().normalize("NFKD").replace(/[^\w\s.-]/g, "").trim().split(/\s+/).filter(Boolean).slice(0, 2).join(".").replace(/[^a-z0-9._-]/g, "").slice(0, 30);
 
 export const AdminPanel = () => {
-  const { setUi, showToast } = useApp();
+  const { setUi, showToast, session } = useApp();
+
+  useEffect(() => {
+    if (session?.role !== 'admin') {
+      setUi(prev => ({ ...prev, admin: false }));
+    }
+  }, [session, setUi]);
+
+  if (session?.role !== 'admin') {
+    return null;
+  }
 
   const [requireLogin, setRequireLogin] = useState(false);
   const [teamUsers, setTeamUsers] = useState([]);
