@@ -140,9 +140,9 @@ export const Sidebar = () => {
   const renderItems = (items, kind) => {
     const starred = items.filter(x => x.starred);
     const others = items.filter(x => !x.starred);
+    const isList = kind === 'list' || kind === 'lists';
 
     const ItemRow = ({ item }) => {
-      const isList = kind === 'list';
       const isActive = isList ? board.activeId === item.id : board.activeNoteId === item.id;
       const openCount = isList ? item.todos.filter(t => !t.done).length : 0;
       const label = isList ? item.name : (item.title || 'Untitled note');
@@ -153,11 +153,11 @@ export const Sidebar = () => {
           draggable
           onDragStart={(e) => handleDragStart(e, item.id)}
           onDragOver={handleDragOver}
-          onDrop={(e) => handleDrop(e, item.id, kind)}
+          onDrop={(e) => handleDrop(e, item.id, isList ? 'lists' : 'notes')}
           onClick={() => {
             updateBoard({
               [isList ? 'activeId' : 'activeNoteId']: item.id,
-              tab: kind
+              tab: isList ? 'lists' : 'notes'
             });
             setUi(prev => ({ ...prev, viewing: true, admin: false, confirm: false, sharing: false, publishing: false }));
           }}
@@ -196,7 +196,7 @@ export const Sidebar = () => {
           {starred.map(item => <ItemRow key={item.id} item={item} />)}
         </div>
         {starred.length > 0 && others.length > 0 && (
-          <div className="sec-label">{kind === 'list' ? 'Lists' : 'Notes'}</div>
+          <div className="sec-label">{isList ? 'Lists' : 'Notes'}</div>
         )}
         <div className="group">
           {others.map(item => <ItemRow key={item.id} item={item} />)}
@@ -509,7 +509,7 @@ export const Sidebar = () => {
       </div>
 
       <div className="lists">
-        {board.tab === 'lists' ? renderItems(board.lists, 'list') : renderItems(board.notes, 'note')}
+        {board.tab === 'lists' ? renderItems(board.lists, 'lists') : renderItems(board.notes, 'notes')}
       </div>
 
       <div className="side-foot">

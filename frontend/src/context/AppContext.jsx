@@ -9,7 +9,11 @@ const normalizeBoard = (b) => {
   if (!Array.isArray(res.notes)) res.notes = [];
   res.lists = res.lists.filter(l => l && l.id && Array.isArray(l.todos));
   res.notes = res.notes.filter(n => n && n.id);
-  if (res.tab !== "notes") res.tab = "lists";
+  if (res.tab === 'note' || res.tab === 'notes') {
+    res.tab = 'notes';
+  } else {
+    res.tab = 'lists';
+  }
   if (!res.lists.find(l => l.id === res.activeId)) res.activeId = res.lists[0] ? res.lists[0].id : null;
   if (!res.notes.find(n => n.id === res.activeNoteId)) res.activeNoteId = res.notes[0] ? res.notes[0].id : null;
   return res;
