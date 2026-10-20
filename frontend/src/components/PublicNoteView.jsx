@@ -95,6 +95,46 @@ export const PublicNoteView = ({ sid, onExit }) => {
     return () => { ignore = true; };
   }, [sid]);
 
+  // Live SSE listener for real-time document updates
+  useEffect(() => {
+    if (!sid) return;
+    let es = null;
+    let isCancelled = false;
+
+    const connect = () => {
+      if (isCancelled) return;
+      try {
+        es = new EventSource('/api/shares/stream');
+        es.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data && data.sid === sid && data.type === 'share_updated' && data.content) {
+              setShareData(prev => ({
+                ...(prev || {}),
+                content: data.content,
+                updatedAt: data.updatedAt,
+                updatedBy: data.updatedBy
+              }));
+            }
+          } catch {}
+        };
+        es.onerror = () => {
+          if (es) {
+            es.close();
+            es = null;
+          }
+        };
+      } catch {}
+    };
+
+    connect();
+
+    return () => {
+      isCancelled = true;
+      if (es) es.close();
+    };
+  }, [sid]);
+
   useEffect(() => {
     if (contentRef.current && shareData?.content?.html) {
       contentRef.current.innerHTML = shareData.content.html;

@@ -4,6 +4,7 @@ import { List } from '../models/List.js';
 import { Note } from '../models/Note.js';
 import { User } from '../models/User.js';
 import { Share } from '../models/Share.js';
+import { syncShareAcrossAllUsers } from '../utils/shareSync.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -23,6 +24,42 @@ const htmlToText = (html = '') => {
 };
 
 export function registerMcpTools(server, authManager) {
+  const notifyListShare = async (user, list) => {
+    try {
+      let sid = list.shared?.sid;
+      if (!sid) {
+        const sh = await Share.findOne({ ownerId: user._id, itemId: list.id });
+        if (sh) sid = sh.sid;
+      }
+      if (sid) {
+        await syncShareAcrossAllUsers({
+          sid,
+          kind: 'list',
+          content: { name: list.name, todos: list.todos },
+          updatedBy: user.name
+        });
+      }
+    } catch {}
+  };
+
+  const notifyNoteShare = async (user, note) => {
+    try {
+      let sid = note.shared?.sid;
+      if (!sid) {
+        const sh = await Share.findOne({ ownerId: user._id, itemId: note.id });
+        if (sh) sid = sh.sid;
+      }
+      if (sid) {
+        await syncShareAcrossAllUsers({
+          sid,
+          kind: 'note',
+          content: { title: note.title, html: note.html },
+          updatedBy: user.name
+        });
+      }
+    } catch {}
+  };
+
   // ----------------------------------------------------
   // 1. AUTHENTICATION TOOLS
   // ----------------------------------------------------
@@ -299,11 +336,8 @@ export function registerMcpTools(server, authManager) {
 
       if (!list) return { content: [{ type: 'text', text: `List ID "${listId}" not found.` }], isError: true };
 
-      // Also update any active share
-      await Share.findOneAndUpdate(
-        { ownerId: user._id, itemId: listId },
-        { 'content.name': name, updatedBy: user.name }
-      );
+      // Also update any active share across all collaborators
+      await notifyListShare(user, list);
 
       return {
         content: [{ type: 'text', text: `Renamed list to "${list.name}".` }]
@@ -432,11 +466,8 @@ export function registerMcpTools(server, authManager) {
       list.todos.push(newTodo);
       await list.save();
 
-      // Sync share if exists
-      await Share.findOneAndUpdate(
-        { ownerId: user._id, itemId: listId },
-        { 'content.todos': list.todos, updatedBy: user.name }
-      );
+      // Sync share if exists across all collaborators
+      await notifyListShare(user, list);
 
       return {
         content: [{
@@ -466,11 +497,8 @@ export function registerMcpTools(server, authManager) {
       todo.done = done !== undefined ? !!done : !todo.done;
       await list.save();
 
-      // Sync share if exists
-      await Share.findOneAndUpdate(
-        { ownerId: user._id, itemId: listId },
-        { 'content.todos': list.todos, updatedBy: user.name }
-      );
+      // Sync share if exists across all collaborators
+      await notifyListShare(user, list);
 
       return {
         content: [{
@@ -505,11 +533,8 @@ export function registerMcpTools(server, authManager) {
 
       await list.save();
 
-      // Sync share if exists
-      await Share.findOneAndUpdate(
-        { ownerId: user._id, itemId: listId },
-        { 'content.todos': list.todos, updatedBy: user.name }
-      );
+      // Sync share if exists across all collaborators
+      await notifyListShare(user, list);
 
       return {
         content: [{ type: 'text', text: `Updated todo "${todo.text}".` }]
@@ -535,11 +560,8 @@ export function registerMcpTools(server, authManager) {
       const [deleted] = list.todos.splice(idx, 1);
       await list.save();
 
-      // Sync share if exists
-      await Share.findOneAndUpdate(
-        { ownerId: user._id, itemId: listId },
-        { 'content.todos': list.todos, updatedBy: user.name }
-      );
+      // Sync share if exists across all collaborators
+      await notifyListShare(user, list);
 
       return {
         content: [{ type: 'text', text: `Deleted todo "${deleted.text}".` }]
@@ -572,6 +594,10 @@ export function registerMcpTools(server, authManager) {
       await source.save();
       await target.save();
 
+      // Sync shares if exist across all collaborators
+      await notifyListShare(user, source);
+      await notifyListShare(user, target);
+
       return {
         content: [{
           type: 'text',
@@ -596,6 +622,13 @@ export function registerMcpTools(server, authManager) {
       list.todos = list.todos.filter(t => !t.done);
       const removedCount = originalCount - list.todos.length;
       await list.save();
+
+      // Sync share if exists across all collaborators
+      await notifyListShare(user, list);
+
+      return {
+        content: [{ type: 'text', text: `Cleared ${removedCount} completed todo(s) from "${list.name}".` }]
+      };
 
       return {
         content: [{ type: 'text', text: `Cleared ${removedCount} completed todo(s) from "${list.name}".` }]
@@ -724,11 +757,8 @@ export function registerMcpTools(server, authManager) {
 
       await note.save();
 
-      // Sync share if exists
-      await Share.findOneAndUpdate(
-        { ownerId: user._id, itemId: noteId },
-        { 'content.title': note.title, 'content.html': note.html, updatedBy: user.name }
-      );
+      // Sync share if exists across all collaborators
+      await notifyNoteShare(user, note);
 
       return {
         content: [{ type: 'text', text: `Updated document "${note.title || 'Untitled note'}".` }]
@@ -759,11 +789,8 @@ export function registerMcpTools(server, authManager) {
       note.html = (note.html || '') + addition;
       await note.save();
 
-      // Sync share if exists
-      await Share.findOneAndUpdate(
-        { ownerId: user._id, itemId: noteId },
-        { 'content.html': note.html, updatedBy: user.name }
-      );
+      // Sync share if exists across all collaborators
+      await notifyNoteShare(user, note);
 
       return {
         content: [{ type: 'text', text: `Appended content to "${note.title || 'Untitled note'}".` }]

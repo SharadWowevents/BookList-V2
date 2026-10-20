@@ -1,30 +1,94 @@
 import { List } from '../models/List.js';
 import { Note } from '../models/Note.js';
 import { User } from '../models/User.js';
+import { Share } from '../models/Share.js';
+import { syncShareAcrossAllUsers } from '../utils/shareSync.js';
 
 export const getBoard = async (req, res) => {
   try {
     const userId = req.user._id;
 
     let lists = await List.find({ userId }).sort({ order: 1, createdAt: 1 });
-    const notes = await Note.find({ userId }).sort({ order: 1, createdAt: -1 });
+    let notes = await Note.find({ userId }).sort({ order: 1, createdAt: -1 });
 
     const user = await User.findById(userId);
 
-    res.json({
-      lists: lists.map(l => ({
+    // Fetch freshest shared content for any shared lists or notes
+    const shareSids = [
+      ...lists.map(l => l.shared?.sid).filter(Boolean),
+      ...notes.map(n => n.shared?.sid).filter(Boolean)
+    ];
+
+    if (shareSids.length > 0) {
+      const shares = await Share.find({ sid: { $in: shareSids } });
+      const shareMap = new Map(shares.map(s => [s.sid, s]));
+
+      lists = lists.map(l => {
+        const sid = l.shared?.sid;
+        if (sid && shareMap.has(sid)) {
+          const sh = shareMap.get(sid);
+          return {
+            id: l.id,
+            name: sh.content?.name ?? l.name,
+            starred: l.starred,
+            todos: sh.content?.todos ?? l.todos,
+            shared: {
+              ...(l.shared || {}),
+              mode: sh.mode,
+              ownerName: sh.ownerName
+            }
+          };
+        }
+        return {
+          id: l.id,
+          name: l.name,
+          starred: l.starred,
+          todos: l.todos,
+          shared: l.shared || null
+        };
+      });
+
+      notes = notes.map(n => {
+        const sid = n.shared?.sid;
+        if (sid && shareMap.has(sid)) {
+          const sh = shareMap.get(sid);
+          return {
+            id: n.id,
+            title: sh.content?.title ?? n.title,
+            starred: n.starred,
+            shared: {
+              ...(n.shared || {}),
+              mode: sh.mode,
+              ownerName: sh.ownerName
+            }
+          };
+        }
+        return {
+          id: n.id,
+          title: n.title,
+          starred: n.starred,
+          shared: n.shared || null
+        };
+      });
+    } else {
+      lists = lists.map(l => ({
         id: l.id,
         name: l.name,
         starred: l.starred,
         todos: l.todos,
         shared: l.shared || null
-      })),
-      notes: notes.map(n => ({
+      }));
+      notes = notes.map(n => ({
         id: n.id,
         title: n.title,
         starred: n.starred,
         shared: n.shared || null
-      })),
+      }));
+    }
+
+    res.json({
+      lists,
+      notes,
       activeId: user.activeId || (lists[0] ? lists[0].id : null),
       activeNoteId: user.activeNoteId || (notes[0] ? notes[0].id : null),
       tab: user.tab || 'lists',
@@ -58,6 +122,16 @@ export const syncBoard = async (req, res) => {
           },
           { upsert: true, new: true }
         );
+
+        // If this list is shared, propagate changes to Share and all collaborators
+        if (item.shared?.sid) {
+          syncShareAcrossAllUsers({
+            sid: item.shared.sid,
+            kind: 'list',
+            content: { name: item.name, todos: item.todos },
+            updatedBy: req.user?.name || 'Someone'
+          }).catch(() => {});
+        }
       }
       // Remove any list not in incoming list array
       const currentIds = lists.map(l => l.id);
@@ -80,6 +154,16 @@ export const syncBoard = async (req, res) => {
           },
           { upsert: true }
         );
+
+        // If this note is shared, propagate title change
+        if (item.shared?.sid && item.title) {
+          syncShareAcrossAllUsers({
+            sid: item.shared.sid,
+            kind: 'note',
+            content: { title: item.title },
+            updatedBy: req.user?.name || 'Someone'
+          }).catch(() => {});
+        }
       }
       const currentNoteIds = notes.map(n => n.id);
       await Note.deleteMany({ userId, id: { $nin: currentNoteIds } });

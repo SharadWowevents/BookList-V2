@@ -578,6 +578,38 @@ export const NoteView = () => {
     editorRef.current.classList.toggle('is-empty', isEmpty);
   }, [activeNoteId, loadNoteBody, hydrateInk]);
 
+  // Listen for live remote updates from collaborators on this shared note
+  useEffect(() => {
+    const handleRemoteUpdate = (e) => {
+      const { noteId, html, updatedBy } = e.detail || {};
+      if (noteId !== activeNoteId || !editorRef.current) return;
+      if (isInkActive) return;
+
+      const currentHtml = getEditorHTML();
+      if (currentHtml === html) return;
+
+      const isFocused = document.activeElement === editorRef.current || editorRef.current.contains(document.activeElement);
+      if (!isFocused) {
+        editorRef.current.innerHTML = html || '';
+        hydrateInk(editorRef.current);
+
+        const words = (editorRef.current.innerText.match(/\S+/g) || []).length;
+        setWordCount(words);
+
+        const isEmpty = !editorRef.current.textContent.trim() &&
+          !editorRef.current.querySelector('li,hr,blockquote,pre,h1,h2,h3,img,div.ink');
+        editorRef.current.classList.toggle('is-empty', isEmpty);
+
+        if (updatedBy) {
+          showToast(`${updatedBy} updated this document.`);
+        }
+      }
+    };
+
+    window.addEventListener('mydeepwork:remote_note_updated', handleRemoteUpdate);
+    return () => window.removeEventListener('mydeepwork:remote_note_updated', handleRemoteUpdate);
+  }, [activeNoteId, isInkActive, getEditorHTML, hydrateInk, showToast]);
+
   // Handle checklist item toggles
   useEffect(() => {
     const edEl = editorRef.current;
@@ -1115,6 +1147,12 @@ ${pubAuthor ? `<div class="by">${avatarHtml}<span><b>${name}</b>${when ? ` • L
               updateBoard({
                 notes: board.notes.map(n => n.id === activeNote.id ? { ...n, title: val } : n)
               });
+              if (shareSid && canEdit) {
+                const cur = loadNoteBody(activeNote.id);
+                sharesAPI.updateShare(shareSid, {
+                  content: { title: val, html: cur?.html || '' }
+                }).catch(() => {});
+              }
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {

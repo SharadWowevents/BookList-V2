@@ -1,4 +1,6 @@
 import { Note } from '../models/Note.js';
+import { Share } from '../models/Share.js';
+import { syncShareAcrossAllUsers } from '../utils/shareSync.js';
 
 export const getNote = async (req, res) => {
   try {
@@ -10,10 +12,22 @@ export const getNote = async (req, res) => {
       return res.status(404).json({ message: 'Note not found.' });
     }
 
+    let title = note.title;
+    let html = note.html || '';
+
+    // If shared, return freshest content from Share
+    if (note.shared?.sid) {
+      const share = await Share.findOne({ sid: note.shared.sid });
+      if (share && share.content) {
+        if (share.content.title !== undefined) title = share.content.title;
+        if (share.content.html !== undefined) html = share.content.html;
+      }
+    }
+
     res.json({
       id: note.id,
-      title: note.title,
-      html: note.html || '',
+      title,
+      html,
       starred: note.starred,
       updatedAt: note.updatedAt
     });
@@ -68,6 +82,25 @@ export const updateNote = async (req, res) => {
     }
 
     await note.save();
+
+    // Check if this note is shared and sync across all collaborators
+    let shareSid = note.shared?.sid;
+    if (!shareSid) {
+      const share = await Share.findOne({ ownerId: userId, itemId: id });
+      if (share) shareSid = share.sid;
+    }
+
+    if (shareSid) {
+      syncShareAcrossAllUsers({
+        sid: shareSid,
+        kind: 'note',
+        content: {
+          title: note.title,
+          ...(html !== undefined && { html: note.html })
+        },
+        updatedBy: req.user?.name || 'Someone'
+      }).catch(() => {});
+    }
 
     res.json({
       id: note.id,

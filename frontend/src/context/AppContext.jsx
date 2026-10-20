@@ -459,6 +459,195 @@ export const AppProvider = ({ children }) => {
     ingestShareRef.current = ingestShare;
   }, [ingestShare]);
 
+  // Live SSE synchronization for shared items
+  useEffect(() => {
+    let es = null;
+    let retryTimer = null;
+    let isCancelled = false;
+
+    const connect = () => {
+      if (isCancelled) return;
+      try {
+        const streamUrl = '/api/shares/stream';
+        es = new EventSource(streamUrl);
+
+        es.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (!data || !data.sid) return;
+
+            if (data.type === 'share_revoked') {
+              setBoardState(prev => {
+                let changed = false;
+                const newLists = prev.lists.map(l => {
+                  if (l.shared?.sid === data.sid) {
+                    changed = true;
+                    return { ...l, shared: null };
+                  }
+                  return l;
+                });
+                const newNotes = prev.notes.map(n => {
+                  if (n.shared?.sid === data.sid) {
+                    changed = true;
+                    return { ...n, shared: null };
+                  }
+                  return n;
+                });
+                if (!changed) return prev;
+                const next = { ...prev, lists: newLists, notes: newNotes };
+                if (session) {
+                  const key = `listbook:board:${session.username || session.key || 'default'}`;
+                  try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
+                }
+                return next;
+              });
+              showToast('A shared item was made private by its owner.');
+              return;
+            }
+
+            if (data.type === 'share_updated') {
+              const { sid, kind, content, updatedBy, mode } = data;
+              if (!content) return;
+
+              setBoardState(prev => {
+                if (kind === 'list') {
+                  const target = prev.lists.find(l => l.shared?.sid === sid);
+                  if (!target) return prev;
+
+                  // Check if identical to prevent re-render loop
+                  const sameName = content.name === undefined || content.name === target.name;
+                  const sameTodos = !Array.isArray(content.todos) || JSON.stringify(content.todos) === JSON.stringify(target.todos);
+                  if (sameName && sameTodos && (!mode || mode === target.shared?.mode)) {
+                    return prev;
+                  }
+
+                  const updatedLists = prev.lists.map(l => {
+                    if (l.shared?.sid === sid) {
+                      return {
+                        ...l,
+                        name: content.name !== undefined ? content.name : l.name,
+                        todos: Array.isArray(content.todos) ? content.todos : l.todos,
+                        shared: {
+                          ...(l.shared || {}),
+                          ...(mode && { mode })
+                        }
+                      };
+                    }
+                    return l;
+                  });
+
+                  const next = { ...prev, lists: updatedLists };
+                  if (session) {
+                    const key = `listbook:board:${session.username || session.key || 'default'}`;
+                    try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
+                  }
+                  return next;
+                } else if (kind === 'note') {
+                  const target = prev.notes.find(n => n.shared?.sid === sid);
+                  if (!target) return prev;
+
+                  const noteId = target.id;
+
+                  // Update note body cache and localStorage
+                  if (content.html !== undefined) {
+                    const currentCached = noteCacheRef.current[noteId];
+                    if (!currentCached || currentCached.html !== content.html) {
+                      const rec = { html: content.html, updatedAt: Date.now() };
+                      noteCacheRef.current[noteId] = rec;
+                      const noteKey = session
+                        ? `listbook:note:${session.username || session.key || session.id}:${noteId}`
+                        : `listbook:note:anon:${noteId}`;
+                      try { localStorage.setItem(noteKey, JSON.stringify(rec)); } catch {}
+
+                      // Dispatch event for active NoteView
+                      window.dispatchEvent(new CustomEvent('mydeepwork:remote_note_updated', {
+                        detail: { noteId, html: content.html, updatedBy }
+                      }));
+                    }
+                  }
+
+                  const sameTitle = content.title === undefined || content.title === target.title;
+                  if (sameTitle && (!mode || mode === target.shared?.mode)) {
+                    return prev;
+                  }
+
+                  const updatedNotes = prev.notes.map(n => {
+                    if (n.shared?.sid === sid) {
+                      return {
+                        ...n,
+                        title: content.title !== undefined ? content.title : n.title,
+                        shared: {
+                          ...(n.shared || {}),
+                          ...(mode && { mode })
+                        }
+                      };
+                    }
+                    return n;
+                  });
+
+                  const next = { ...prev, notes: updatedNotes };
+                  if (session) {
+                    const key = `listbook:board:${session.username || session.key || 'default'}`;
+                    try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
+                  }
+                  return next;
+                }
+                return prev;
+              });
+            }
+          } catch {}
+        };
+
+        es.onerror = () => {
+          if (es) {
+            es.close();
+            es = null;
+          }
+          if (!isCancelled) {
+            clearTimeout(retryTimer);
+            retryTimer = setTimeout(connect, 5000);
+          }
+        };
+      } catch {
+        if (!isCancelled) {
+          clearTimeout(retryTimer);
+          retryTimer = setTimeout(connect, 6000);
+        }
+      }
+    };
+
+    connect();
+
+    return () => {
+      isCancelled = true;
+      if (es) es.close();
+      clearTimeout(retryTimer);
+    };
+  }, [session, showToast]);
+
+  // Window focus re-sync for shared items
+  useEffect(() => {
+    const handleFocus = () => {
+      if (getToken()) {
+        boardAPI.getBoard().then(remoteBoard => {
+          if (remoteBoard && Array.isArray(remoteBoard.lists)) {
+            const active = normalizeBoard(remoteBoard);
+            setBoardState(prev => {
+              if (JSON.stringify(prev.lists) !== JSON.stringify(active.lists) ||
+                  JSON.stringify(prev.notes) !== JSON.stringify(active.notes)) {
+                return active;
+              }
+              return prev;
+            });
+          }
+        }).catch(() => {});
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
   // Initialize and verify backend session on mount (once)
   useEffect(() => {
     const token = getToken();

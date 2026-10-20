@@ -1,6 +1,7 @@
 import { Share } from '../models/Share.js';
 import { List } from '../models/List.js';
 import { Note } from '../models/Note.js';
+import { syncShareAcrossAllUsers, broadcastShareRevoked } from '../utils/shareSync.js';
 
 const uid = () => (Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)).replace(/[^a-z0-9]/g, '');
 
@@ -96,45 +97,38 @@ export const updateShare = async (req, res) => {
 
     const isOwner = req.user && share.ownerId.equals(req.user._id);
 
-    // If caller is authenticated owner and wants to change permission mode
-    if (mode && isOwner) {
-      share.mode = mode;
+    // If caller wants to change permission mode, only owner can change mode
+    if (mode && !isOwner) {
+      return res.status(403).json({ message: 'Only the owner can change permissions.' });
     }
 
     if (content) {
       if (share.mode !== 'edit' && !isOwner) {
         return res.status(403).json({ message: 'This item is view-only. You cannot edit it.' });
       }
-      share.content = content;
-      share.updatedBy = req.user ? req.user.name : 'Someone';
     }
 
-    await share.save();
+    const updatedShare = await syncShareAcrossAllUsers({
+      sid,
+      kind: share.kind,
+      content,
+      mode: isOwner ? mode : undefined,
+      updatedBy: req.user?.name || 'Someone'
+    });
 
-    // Also sync back to owner's original list or note if owner is updating
-    if (isOwner && content) {
-      if (share.kind === 'list') {
-        await List.findOneAndUpdate(
-          { userId: req.user._id, id: share.itemId },
-          { name: content.name, todos: content.todos }
-        );
-      } else {
-        await Note.findOneAndUpdate(
-          { userId: req.user._id, id: share.itemId },
-          { title: content.title, html: content.html }
-        );
-      }
+    if (!updatedShare) {
+      return res.status(500).json({ message: 'Error syncing shared item.' });
     }
 
     res.json({
-      sid: share.sid,
-      itemId: share.itemId,
-      mode: share.mode,
-      content: share.content,
-      updatedAt: share.updatedAt,
-      updatedBy: share.updatedBy,
+      sid: updatedShare.sid,
+      itemId: updatedShare.itemId,
+      mode: updatedShare.mode,
+      content: updatedShare.content,
+      updatedAt: updatedShare.updatedAt,
+      updatedBy: updatedShare.updatedBy,
       own: isOwner,
-      canEdit: isOwner || share.mode === 'edit'
+      canEdit: isOwner || updatedShare.mode === 'edit'
     });
   } catch (err) {
     console.error('updateShare error:', err);
@@ -153,6 +147,12 @@ export const deleteShare = async (req, res) => {
     }
 
     await Share.deleteOne({ sid });
+    // Also remove shared metadata from all users' lists/notes
+    await List.updateMany({ 'shared.sid': sid }, { $set: { shared: null } });
+    await Note.updateMany({ 'shared.sid': sid }, { $set: { shared: null } });
+
+    broadcastShareRevoked(sid);
+
     res.json({ message: 'Sharing stopped. The item is private again.' });
   } catch (err) {
     console.error('deleteShare error:', err);
