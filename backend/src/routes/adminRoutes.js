@@ -1,7 +1,7 @@
 import express from 'express';
 import {
   getConfig, updateConfig, getUsers, createUser,
-  toggleUserStatus, resetPassword, deleteUser
+  toggleUserStatus, resetPassword, deleteUser, renameUser
 } from '../controllers/adminController.js';
 import { protect, adminOnly } from '../middleware/auth.js';
 
@@ -15,6 +15,7 @@ router.put('/config', updateConfig);
 
 router.get('/users', getUsers);
 router.post('/users', createUser);
+router.put('/users/:username/rename', renameUser);
 router.put('/users/:username/status', toggleUserStatus);
 router.put('/users/:username/reset-password', resetPassword);
 router.delete('/users/:username', deleteUser);

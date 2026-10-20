@@ -122,6 +122,10 @@ export const adminAPI = {
     method: 'POST',
     body: JSON.stringify(userData)
   }),
+  renameUser: (username, data) => request('/admin/users/' + encodeURIComponent(username) + '/rename', {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  }),
   toggleUserStatus: (username) => request('/admin/users/' + username + '/status', {
     method: 'PUT'
   }),

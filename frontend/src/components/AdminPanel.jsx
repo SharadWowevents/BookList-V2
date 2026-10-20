@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { adminAPI } from '../services/api';
 import {
   BackIcon, KeyIcon, PauseIcon, PlayIcon, TrashIcon, RefreshIcon,
-  EyeIcon, CopyIcon
+  EyeIcon, CopyIcon, PencilIcon, XIcon
 } from './Icons';
 
 const WORDS = "amber,atlas,bloom,cedar,coral,delta,ember,fable,grove,harbor,indigo,juniper,lotus,maple,meadow,nova,orbit,pebble,quartz,river,saffron,summit,tango,tidal,velvet,willow,zephyr,canyon,falcon,lagoon".split(",");
@@ -18,7 +18,7 @@ const suggestUsername = (name) =>
   name.toLowerCase().normalize("NFKD").replace(/[^\w\s.-]/g, "").trim().split(/\s+/).filter(Boolean).slice(0, 2).join(".").replace(/[^a-z0-9._-]/g, "").slice(0, 30);
 
 export const AdminPanel = () => {
-  const { setUi, showToast, session } = useApp();
+  const { setUi, showToast, session, setSession } = useApp();
 
   useEffect(() => {
     if (session?.role !== 'admin') {
@@ -44,6 +44,13 @@ export const AdminPanel = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDelUser, setConfirmDelUser] = useState(null);
   const [busy, setBusy] = useState(false);
+
+  // Rename state
+  const [editingUser, setEditingUser] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editUsername, setEditUsername] = useState('');
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState('');
 
   useEffect(() => {
     let ignore = false;
@@ -162,6 +169,73 @@ export const AdminPanel = () => {
       showToast(`User ${u} deleted.`);
     } catch {
       showToast('Could not delete user.');
+    }
+  };
+
+  const startEditing = (u) => {
+    setEditingUser(u.u);
+    setEditName(u.name || u.u);
+    setEditUsername(u.u);
+    setEditError('');
+  };
+
+  const cancelEditing = () => {
+    setEditingUser(null);
+    setEditError('');
+  };
+
+  const handleSaveRename = async (u) => {
+    setEditError('');
+    const trimmedName = editName.trim();
+    const trimmedUser = editUsername.trim().toLowerCase();
+
+    if (!trimmedName) {
+      setEditError('Full name is required.');
+      return;
+    }
+    if (!/^[a-z0-9][a-z0-9._-]{2,29}$/.test(trimmedUser)) {
+      setEditError('Usernames must be 3–30 characters: lowercase letters, numbers, dots, dashes or underscores.');
+      return;
+    }
+
+    setEditBusy(true);
+    try {
+      const res = await adminAPI.renameUser(u.u, {
+        name: trimmedName,
+        newUsername: trimmedUser !== u.u ? trimmedUser : undefined
+      });
+
+      const updated = res.user;
+
+      // Update team list
+      setTeamUsers(prev => prev.map(item => item.u === u.u ? updated : item));
+
+      // If the admin renamed themselves, update active session immediately
+      if (session && (session.username === u.u || session.name === u.name)) {
+        const nextSession = {
+          ...session,
+          name: updated.name,
+          username: updated.u
+        };
+        if (u.u !== updated.u) {
+          try {
+            const oldKey = `listbook:board:${u.u}`;
+            const newKey = `listbook:board:${updated.u}`;
+            const existingBoard = localStorage.getItem(oldKey);
+            if (existingBoard) {
+              localStorage.setItem(newKey, existingBoard);
+            }
+          } catch {}
+        }
+        setSession(nextSession);
+      }
+
+      setEditingUser(null);
+      showToast(`Renamed to ${updated.name} (@${updated.u}).`);
+    } catch (err) {
+      setEditError(err.message || 'Could not rename user.');
+    } finally {
+      setEditBusy(false);
     }
   };
 
@@ -354,6 +428,98 @@ export const AdminPanel = () => {
             ) : (
               filteredUsers.map(u => {
                 const isOff = u.status !== 'active';
+                const isSelf = session?.username === u.u;
+                const isEditing = editingUser === u.u;
+
+                if (isEditing) {
+                  return (
+                    <div
+                      key={u.u}
+                      className="person"
+                      style={{
+                        flexDirection: 'column',
+                        alignItems: 'stretch',
+                        gap: 12,
+                        background: 'var(--soft)',
+                        padding: '14px',
+                        borderRadius: 14,
+                        margin: '8px 0',
+                        border: '1px solid var(--line)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span className="avatar sm">
+                            {(editName || u.name || u.u).trim().charAt(0).toUpperCase()}
+                          </span>
+                          <span style={{ fontWeight: 600, fontSize: '1rem' }}>
+                            Rename {isSelf ? 'Your Account' : `@${u.u}`}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={cancelEditing}
+                          title="Cancel"
+                          aria-label="Cancel editing"
+                          style={{ width: 30, height: 30 }}
+                        >
+                          <XIcon size={16} />
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                        <div className="field" style={{ margin: 0 }}>
+                          <label style={{ fontSize: '0.82rem', color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Full display name</label>
+                          <input
+                            className="input"
+                            maxLength={60}
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            placeholder="e.g. Aditi Rao"
+                            style={{ padding: '8px 12px', fontSize: '1rem' }}
+                            autoFocus
+                          />
+                        </div>
+                        <div className="field" style={{ margin: 0 }}>
+                          <label style={{ fontSize: '0.82rem', color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Username handle</label>
+                          <input
+                            className="input"
+                            maxLength={30}
+                            value={editUsername}
+                            onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
+                            placeholder="e.g. aditi.rao"
+                            autoCapitalize="none"
+                            spellCheck="false"
+                            style={{ padding: '8px 12px', fontSize: '1rem' }}
+                          />
+                        </div>
+                      </div>
+
+                      {editError && <div className="err" style={{ fontSize: '0.88rem' }}>{editError}</div>}
+
+                      <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                        <button
+                          type="button"
+                          className="pill ink"
+                          onClick={() => handleSaveRename(u)}
+                          disabled={editBusy}
+                        >
+                          {editBusy ? 'Saving…' : 'Save changes'}
+                        </button>
+                        <button
+                          type="button"
+                          className="pill plain"
+                          onClick={cancelEditing}
+                          disabled={editBusy}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div key={u.u} className={`person ${isOff ? 'off' : ''}`}>
                     <span className="avatar sm">
@@ -362,6 +528,11 @@ export const AdminPanel = () => {
                     <div className="person-main">
                       <div className="person-name">
                         {u.name || u.u}{' '}
+                        {isSelf && (
+                          <span className="pill-state is-on" style={{ fontSize: '0.72rem', padding: '2px 8px' }}>
+                            You
+                          </span>
+                        )}
                         <span className={`pill-state ${isOff ? 'is-off' : 'is-on'}`}>
                           {isOff ? 'Turned off' : 'Active'}
                         </span>
@@ -393,6 +564,15 @@ export const AdminPanel = () => {
                           <button
                             type="button"
                             className="icon-btn"
+                            title="Rename"
+                            aria-label={`Rename ${u.name || u.u}`}
+                            onClick={() => startEditing(u)}
+                          >
+                            <PencilIcon />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn"
                             title="Reset password"
                             aria-label={`Reset password for ${u.u}`}
                             onClick={() => handleResetPassword(u)}
@@ -408,15 +588,17 @@ export const AdminPanel = () => {
                           >
                             {isOff ? <PlayIcon /> : <PauseIcon />}
                           </button>
-                          <button
-                            type="button"
-                            className="icon-btn"
-                            title="Delete"
-                            aria-label={`Delete ${u.u}`}
-                            onClick={() => setConfirmDelUser(u.u)}
-                          >
-                            <TrashIcon />
-                          </button>
+                          {!isSelf && (
+                            <button
+                              type="button"
+                              className="icon-btn"
+                              title="Delete"
+                              aria-label={`Delete ${u.u}`}
+                              onClick={() => setConfirmDelUser(u.u)}
+                            >
+                              <TrashIcon />
+                            </button>
+                          )}
                         </>
                       )}
                     </div>

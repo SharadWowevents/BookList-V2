@@ -8,6 +8,8 @@ import boardRoutes from './routes/boardRoutes.js';
 import noteRoutes from './routes/noteRoutes.js';
 import shareRoutes from './routes/shareRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import { setupMcpSseRoutes } from './mcp/sseHandler.js';
+import { setupOAuthRoutes } from './mcp/oauth.js';
 
 dotenv.config();
 
@@ -42,6 +44,10 @@ app.use('/api/board', boardRoutes);
 app.use('/api/notes', noteRoutes);
 app.use('/api/shares', shareRoutes);
 app.use('/api/admin', adminRoutes);
+
+// Model Context Protocol (MCP) & OAuth Routes
+setupOAuthRoutes(app);
+setupMcpSseRoutes(app);
 
 // Public view link redirect
 app.get('/p/:sid', (req, res) => {

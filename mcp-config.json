@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "booklist": {
+      "command": "node",
+      "args": ["d:/C_lang/Code/Web/WowEvents/BookList_version2/backend/src/mcp/index.js"],
+      "env": {
+        "MONGO_URI": "mongodb://127.0.0.1:27017/mydeepwork",
+        "BOOKLIST_USERNAME": "your_username_here",
+        "BOOKLIST_PASSWORD": "your_password_here"
+      }
+    }
+  }
+}
+

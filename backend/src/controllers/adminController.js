@@ -3,6 +3,7 @@ import { User } from '../models/User.js';
 import { List } from '../models/List.js';
 import { Note } from '../models/Note.js';
 import { Config } from '../models/Config.js';
+import { Share } from '../models/Share.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -186,6 +187,7 @@ export const deleteUser = async (req, res) => {
     // Clean up user's data
     await List.deleteMany({ userId: user._id });
     await Note.deleteMany({ userId: user._id });
+    await Share.deleteMany({ ownerId: user._id });
     await User.deleteOne({ _id: user._id });
 
     res.json({ message: `User ${user.name || username} deleted.` });
@@ -194,4 +196,66 @@ export const deleteUser = async (req, res) => {
     res.status(500).json({ message: 'Error deleting user.' });
   }
 };
+
+export const renameUser = async (req, res) => {
+  try {
+    const { username } = req.params;
+    const { name, newUsername } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: 'Name is required.' });
+    }
+
+    const u = username.toLowerCase();
+    const user = await User.findOne({ username: u });
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    const trimmedName = name.trim();
+    user.name = trimmedName;
+
+    let usernameChanged = false;
+    let oldUsername = user.username;
+
+    if (newUsername && newUsername.trim()) {
+      const targetUser = newUsername.trim().toLowerCase();
+      if (targetUser !== user.username) {
+        if (!/^[a-z0-9][a-z0-9._-]{2,29}$/.test(targetUser)) {
+          return res.status(400).json({
+            message: 'Usernames must be 3–30 characters: lowercase letters, numbers, dots, dashes or underscores.'
+          });
+        }
+        const existing = await User.findOne({ username: targetUser });
+        if (existing && existing._id.toString() !== user._id.toString()) {
+          return res.status(400).json({ message: `“${targetUser}” is already taken. Try another username.` });
+        }
+        user.username = targetUser;
+        usernameChanged = true;
+      }
+    }
+
+    await user.save();
+
+    // Keep public and shared ownerName in sync
+    await Share.updateMany({ ownerId: user._id }, { ownerName: trimmedName });
+
+    res.json({
+      message: 'User renamed successfully.',
+      user: {
+        u: user.username,
+        name: user.name,
+        status: user.status,
+        role: user.role,
+        authType: user.authType,
+        lastSeen: user.lastSeen,
+        createdAt: user.createdAt
+      },
+      usernameChanged,
+      oldUsername
+    });
+  } catch (err) {
+    console.error('renameUser error:', err);
+    res.status(500).json({ message: 'Error renaming user.' });
+  }
+};
+
 
