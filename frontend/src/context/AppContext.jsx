@@ -33,7 +33,16 @@ export const AppProvider = ({ children }) => {
 
   const [accent, setAccentState] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem('listbook:accent')) || 'green';
+      const val = localStorage.getItem('listbook:accent');
+      if (val) {
+        try {
+          const parsed = JSON.parse(val);
+          return ACCENTS[parsed] ? parsed : 'green';
+        } catch {
+          return ACCENTS[val] ? val : 'green';
+        }
+      }
+      return 'green';
     } catch {
       return 'green';
     }
@@ -41,7 +50,16 @@ export const AppProvider = ({ children }) => {
 
   const [theme, setThemeState] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem('listbook:theme')) || 'auto';
+      const val = localStorage.getItem('listbook:theme');
+      if (val) {
+        try {
+          const parsed = JSON.parse(val);
+          return (parsed === 'light' || parsed === 'dark') ? parsed : 'auto';
+        } catch {
+          return (val === 'light' || val === 'dark') ? val : 'auto';
+        }
+      }
+      return 'auto';
     } catch {
       return 'auto';
     }
@@ -141,6 +159,31 @@ export const AppProvider = ({ children }) => {
     }
     try { localStorage.setItem('listbook:theme', JSON.stringify(theme)); } catch {}
   }, [theme]);
+
+  const setAccent = useCallback((val) => {
+    const a = ACCENTS[val] ? val : 'green';
+    setAccentState(a);
+    try { localStorage.setItem('listbook:accent', JSON.stringify(a)); } catch {}
+    document.documentElement.setAttribute('data-accent', a);
+    if (getToken()) {
+      authAPI.updateProfile({ prefs: { accent: a } }).catch(() => {});
+    }
+  }, []);
+
+  const setTheme = useCallback((val) => {
+    const t = (val === 'light' || val === 'dark') ? val : 'auto';
+    setThemeState(t);
+    try { localStorage.setItem('listbook:theme', JSON.stringify(t)); } catch {}
+    const r = document.documentElement;
+    if (t === 'light' || t === 'dark') {
+      r.setAttribute('data-theme', t);
+    } else {
+      r.removeAttribute('data-theme');
+    }
+    if (getToken()) {
+      authAPI.updateProfile({ prefs: { theme: t } }).catch(() => {});
+    }
+  }, []);
 
   // Profile photo state
   const [photo, setPhotoState] = useState(() => {
@@ -424,8 +467,31 @@ export const AppProvider = ({ children }) => {
         if (res.user) {
           setSessionState(res.user);
           if (res.user.photo) setPhotoState(res.user.photo);
-          if (res.user.prefs?.accent) setAccentState(res.user.prefs.accent);
-          if (res.user.prefs?.theme) setThemeState(res.user.prefs.theme);
+
+          // Respect local theme & accent if already set in localStorage
+          const localTheme = localStorage.getItem('listbook:theme');
+          if (localTheme) {
+            try {
+              const parsed = JSON.parse(localTheme);
+              if (parsed && parsed !== res.user.prefs?.theme) {
+                authAPI.updateProfile({ prefs: { theme: parsed } }).catch(() => {});
+              }
+            } catch {}
+          } else if (res.user.prefs?.theme) {
+            setTheme(res.user.prefs.theme);
+          }
+
+          const localAccent = localStorage.getItem('listbook:accent');
+          if (localAccent) {
+            try {
+              const parsed = JSON.parse(localAccent);
+              if (parsed && parsed !== res.user.prefs?.accent) {
+                authAPI.updateProfile({ prefs: { accent: parsed } }).catch(() => {});
+              }
+            } catch {}
+          } else if (res.user.prefs?.accent) {
+            setAccent(res.user.prefs.accent);
+          }
 
           // Fetch board from MongoDB
           boardAPI.getBoard().then(remoteBoard => {
@@ -559,9 +625,9 @@ export const AppProvider = ({ children }) => {
       ui,
       setUi,
       accent,
-      setAccent: setAccentState,
+      setAccent,
       theme,
-      setTheme: setThemeState,
+      setTheme,
       collapsed,
       setCollapsed,
       photo,
