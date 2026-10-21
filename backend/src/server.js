@@ -15,6 +15,7 @@ import { setupOAuthRoutes } from './mcp/oauth.js';
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', true);
 const PORT = process.env.PORT || 5016;
 
 // Connect to MongoDB

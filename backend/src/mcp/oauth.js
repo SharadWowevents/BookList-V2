@@ -17,14 +17,18 @@ function base64Url(buf) {
 function verifyPkce(codeVerifier, codeChallenge, method = 'S256') {
   if (!codeChallenge) return true;
   if (!codeVerifier) return false;
-  if (method === 'plain') return codeVerifier === codeChallenge;
+  const m = String(method || 'S256').toUpperCase();
+  if (m === 'PLAIN') return codeVerifier === codeChallenge;
   const hash = crypto.createHash('sha256').update(codeVerifier).digest();
   return base64Url(hash) === codeChallenge;
 }
 
 export function getBaseUrl(req) {
-  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+  const forwardedProto = req.headers['x-forwarded-proto'];
   const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:5016';
+  const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+  // For remote/production servers (e.g. mydeepwork.in), always enforce https://
+  const proto = isLocal ? (forwardedProto || req.protocol || 'http') : 'https';
   return `${proto}://${host}`;
 }
 
@@ -34,69 +38,95 @@ export function setupOAuthRoutes(app) {
   // ----------------------------------------------------
   const handleProtectedResourceMetadata = (req, res) => {
     const base = getBaseUrl(req);
-    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', '*');
     res.json({
       resource: `${base}/api/mcp`,
-      authorization_servers: [base],
+      authorization_servers: [`${base}/api`, base],
       scopes_supported: ['mcp:all', 'mcp:tools', 'mcp:resources', 'mcp:prompts', 'offline_access'],
       bearer_methods_supported: ['header'],
       resource_documentation: `${base}/api/mcp`
     });
   };
 
-  app.get('/.well-known/oauth-protected-resource', handleProtectedResourceMetadata);
-  app.get('/api/mcp/.well-known/oauth-protected-resource', handleProtectedResourceMetadata);
   app.get('/api/.well-known/oauth-protected-resource', handleProtectedResourceMetadata);
+  app.get('/api/mcp/.well-known/oauth-protected-resource', handleProtectedResourceMetadata);
+  app.get('/.well-known/oauth-protected-resource', handleProtectedResourceMetadata);
 
   // ----------------------------------------------------
   // 2. AUTHORIZATION SERVER METADATA (RFC 8414 & OIDC)
   // ----------------------------------------------------
   const handleAuthServerMetadata = (req, res) => {
     const base = getBaseUrl(req);
-    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', '*');
     res.json({
       issuer: base,
-      authorization_endpoint: `${base}/oauth/authorize`,
-      token_endpoint: `${base}/oauth/token`,
-      registration_endpoint: `${base}/oauth/register`,
-      userinfo_endpoint: `${base}/oauth/userinfo`,
-      introspection_endpoint: `${base}/oauth/introspect`,
-      jwks_uri: `${base}/.well-known/jwks.json`,
+      authorization_endpoint: `${base}/api/oauth/authorize`,
+      token_endpoint: `${base}/api/oauth/token`,
+      registration_endpoint: `${base}/api/oauth/register`,
+      userinfo_endpoint: `${base}/api/oauth/userinfo`,
+      introspection_endpoint: `${base}/api/oauth/introspect`,
+      jwks_uri: `${base}/api/.well-known/jwks.json`,
       response_types_supported: ['code'],
       grant_types_supported: ['authorization_code', 'refresh_token'],
       code_challenge_methods_supported: ['S256', 'plain'],
       token_endpoint_auth_methods_supported: ['none', 'client_secret_post', 'client_secret_basic'],
-      scopes_supported: ['mcp:all', 'mcp:tools', 'mcp:resources', 'mcp:prompts', 'offline_access']
+      scopes_supported: ['mcp:all', 'mcp:tools', 'mcp:resources', 'mcp:prompts', 'offline_access'],
+      subject_types_supported: ['public'],
+      id_token_signing_alg_values_supported: ['HS256']
     });
   };
 
-  app.get('/.well-known/oauth-authorization-server', handleAuthServerMetadata);
+  app.get('/api/.well-known/oauth-authorization-server', handleAuthServerMetadata);
   app.get('/api/mcp/.well-known/oauth-authorization-server', handleAuthServerMetadata);
-  app.get('/.well-known/openid-configuration', handleAuthServerMetadata);
-  app.get('/api/mcp/.well-known/openid-configuration', handleAuthServerMetadata);
+  app.get('/.well-known/oauth-authorization-server', handleAuthServerMetadata);
 
-  // JWKS dummy endpoint for JWT verification
-  app.get('/.well-known/jwks.json', (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
+  app.get('/api/.well-known/openid-configuration', handleAuthServerMetadata);
+  app.get('/api/mcp/.well-known/openid-configuration', handleAuthServerMetadata);
+  app.get('/.well-known/openid-configuration', handleAuthServerMetadata);
+
+  // JWKS endpoint for JWT verification
+  const handleJwks = (req, res) => {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', '*');
     res.json({ keys: [] });
-  });
+  };
+  app.get('/api/.well-known/jwks.json', handleJwks);
+  app.get('/api/mcp/.well-known/jwks.json', handleJwks);
+  app.get('/.well-known/jwks.json', handleJwks);
 
   // ----------------------------------------------------
   // 3. DYNAMIC CLIENT REGISTRATION (RFC 7591)
   // ----------------------------------------------------
-  app.post('/oauth/register', (req, res) => {
+  const handleClientRegistration = (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
     const body = req.body || {};
     const clientId = 'mcp_client_' + crypto.randomBytes(8).toString('hex');
     const clientSecret = crypto.randomBytes(24).toString('hex');
+    const now = Math.floor(Date.now() / 1000);
+
+    const redirectUris = Array.isArray(body.redirect_uris) && body.redirect_uris.length > 0
+      ? body.redirect_uris
+      : (body.redirect_uri ? [body.redirect_uri] : ['https://chatgpt.com/connector/oauth/callback']);
 
     const clientData = {
       client_id: clientId,
       client_secret: clientSecret,
+      client_id_issued_at: now,
+      client_secret_expires_at: 0,
       client_name: body.client_name || 'ChatGPT Custom MCP',
-      redirect_uris: Array.isArray(body.redirect_uris) ? body.redirect_uris : [],
+      redirect_uris: redirectUris,
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: body.token_endpoint_auth_method || 'none'
@@ -104,13 +134,16 @@ export function setupOAuthRoutes(app) {
 
     registeredClients.set(clientId, clientData);
 
-    res.status(201).json(clientData);
-  });
+    return res.status(201).json(clientData);
+  };
+
+  app.post('/api/oauth/register', handleClientRegistration);
+  app.post('/oauth/register', handleClientRegistration);
 
   // ----------------------------------------------------
-  // 4. AUTHORIZATION ENDPOINT (GET = UI, POST = SUBMIT)
+  // 4. AUTHORIZATION ENDPOINT (RFC 6749)
   // ----------------------------------------------------
-  app.get('/oauth/authorize', (req, res) => {
+  const handleAuthorizeGet = (req, res) => {
     const {
       client_id = '',
       redirect_uri = '',
@@ -131,22 +164,24 @@ export function setupOAuthRoutes(app) {
       scope,
       error: null
     }));
-  });
+  };
 
-  app.post('/oauth/authorize', async (req, res) => {
+  const handleAuthorizePost = async (req, res) => {
+    const params = { ...req.query, ...req.body };
     const {
       client_id,
       redirect_uri,
       state,
       code_challenge,
       code_challenge_method,
+      scope,
       username,
       password
-    } = req.body;
+    } = params;
 
     if (!username || !password) {
       return res.status(400).send(renderLoginPage({
-        ...req.body,
+        ...params,
         error: 'Please enter both your Username/ID and Password.'
       }));
     }
@@ -163,14 +198,14 @@ export function setupOAuthRoutes(app) {
 
       if (!user) {
         return res.status(400).send(renderLoginPage({
-          ...req.body,
+          ...params,
           error: `User "${username}" not found in User DB.`
         }));
       }
 
       if (user.status !== 'active') {
         return res.status(403).send(renderLoginPage({
-          ...req.body,
+          ...params,
           error: `Your account (@${user.username}) is currently deactivated.`
         }));
       }
@@ -186,7 +221,7 @@ export function setupOAuthRoutes(app) {
 
       if (!isMatch) {
         return res.status(400).send(renderLoginPage({
-          ...req.body,
+          ...params,
           error: 'Incorrect password or PIN. Please try again.'
         }));
       }
@@ -204,7 +239,8 @@ export function setupOAuthRoutes(app) {
       });
 
       // Redirect back to ChatGPT / client redirect_uri
-      const redirectUrl = new URL(redirect_uri);
+      const targetUri = redirect_uri || 'https://chatgpt.com/connector/oauth/callback';
+      const redirectUrl = new URL(targetUri);
       redirectUrl.searchParams.set('code', code);
       if (state) redirectUrl.searchParams.set('state', state);
 
@@ -212,23 +248,32 @@ export function setupOAuthRoutes(app) {
     } catch (err) {
       console.error('[OAuth Authorize Error]:', err);
       return res.status(500).send(renderLoginPage({
-        ...req.body,
+        ...params,
         error: `Server error during authorization: ${err.message}`
       }));
     }
-  });
+  };
+
+  app.get('/api/oauth/authorize', handleAuthorizeGet);
+  app.get('/oauth/authorize', handleAuthorizeGet);
+  app.post('/api/oauth/authorize', handleAuthorizePost);
+  app.post('/oauth/authorize', handleAuthorizePost);
 
   // ----------------------------------------------------
   // 5. TOKEN ENDPOINT (RFC 6749)
   // ----------------------------------------------------
-  app.post('/oauth/token', async (req, res) => {
+  const handleTokenPost = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Pragma', 'no-cache');
 
     const grantType = req.body.grant_type;
 
     if (grantType === 'authorization_code') {
-      const { code, code_verifier, redirect_uri } = req.body;
+      const { code, code_verifier } = req.body;
 
       if (!code) {
         return res.status(400).json({ error: 'invalid_request', error_description: 'Missing authorization code.' });
@@ -307,6 +352,7 @@ export function setupOAuthRoutes(app) {
           access_token: accessToken,
           token_type: 'Bearer',
           expires_in: 2592000,
+          refresh_token,
           scope: 'mcp:all'
         });
       } catch {
@@ -315,12 +361,19 @@ export function setupOAuthRoutes(app) {
     }
 
     return res.status(400).json({ error: 'unsupported_grant_type', error_description: `Grant type "${grantType}" not supported.` });
-  });
+  };
+
+  app.post('/api/oauth/token', handleTokenPost);
+  app.post('/oauth/token', handleTokenPost);
 
   // ----------------------------------------------------
   // 6. USERINFO & INTROSPECTION
   // ----------------------------------------------------
-  app.get('/oauth/userinfo', async (req, res) => {
+  const handleUserInfo = async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
     const auth = req.headers.authorization;
     if (!auth || !auth.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'unauthorized' });
@@ -332,19 +385,49 @@ export function setupOAuthRoutes(app) {
       const user = await User.findById(decoded.id);
       if (!user) return res.status(404).json({ error: 'user_not_found' });
 
-      res.json({
+      return res.json({
         sub: user._id.toString(),
         preferred_username: user.username,
         name: user.name,
         role: user.role
       });
     } catch {
-      res.status(401).json({ error: 'invalid_token' });
+      return res.status(401).json({ error: 'invalid_token' });
     }
-  });
+  };
+
+  const handleIntrospect = async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
+    const token = req.body.token;
+    if (!token) return res.json({ active: false });
+
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'mydeepwork_secret');
+      const user = await User.findById(decoded.id);
+      if (!user || user.status !== 'active') return res.json({ active: false });
+      return res.json({
+        active: true,
+        scope: 'mcp:all',
+        client_id: 'booklist_mcp',
+        username: user.username,
+        sub: user._id.toString(),
+        exp: decoded.exp
+      });
+    } catch {
+      return res.json({ active: false });
+    }
+  };
+
+  app.get('/api/oauth/userinfo', handleUserInfo);
+  app.get('/oauth/userinfo', handleUserInfo);
+  app.post('/api/oauth/introspect', handleIntrospect);
+  app.post('/oauth/introspect', handleIntrospect);
 }
 
-function renderLoginPage({ client_id, redirect_uri, state, code_challenge, code_challenge_method, error }) {
+function renderLoginPage({ client_id, redirect_uri, state, code_challenge, code_challenge_method, scope, error }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -491,12 +574,13 @@ function renderLoginPage({ client_id, redirect_uri, state, code_challenge, code_
 
     ${error ? `<div class="error">${error}</div>` : ''}
 
-    <form method="POST" action="/oauth/authorize">
+    <form method="POST" action="">
       <input type="hidden" name="client_id" value="${escapeHtml(client_id || '')}">
       <input type="hidden" name="redirect_uri" value="${escapeHtml(redirect_uri || '')}">
       <input type="hidden" name="state" value="${escapeHtml(state || '')}">
       <input type="hidden" name="code_challenge" value="${escapeHtml(code_challenge || '')}">
       <input type="hidden" name="code_challenge_method" value="${escapeHtml(code_challenge_method || '')}">
+      <input type="hidden" name="scope" value="${escapeHtml(scope || 'mcp:all')}">
 
       <div class="form-group">
         <label for="username">Username or User ID</label>
@@ -527,4 +611,3 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
-

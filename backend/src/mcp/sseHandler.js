@@ -38,7 +38,7 @@ export function setupMcpSseRoutes(app) {
 
       // If client didn't authenticate, we still allow connection so tools like 'login' can be used,
       // but we add WWW-Authenticate header so OAuth clients (like ChatGPT) discover the auth metadata
-      res.setHeader('WWW-Authenticate', `Bearer realm="mcp", resource_metadata="${base}/.well-known/oauth-protected-resource"`);
+      res.setHeader('WWW-Authenticate', `Bearer realm="mcp", resource_metadata="${base}/api/.well-known/oauth-protected-resource"`);
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Headers', '*');
 
@@ -74,10 +74,48 @@ export function setupMcpSseRoutes(app) {
     res.setHeader('Access-Control-Allow-Headers', '*');
 
     const sessionId = req.query.sessionId;
-    const transport = transports.get(sessionId);
+    const transport = sessionId ? transports.get(sessionId) : null;
 
     if (!transport) {
-      return res.status(404).json({ message: `MCP Session "${sessionId}" not found or expired.` });
+      // If it's a JSON-RPC probe (e.g. OpenAI / ping / initialize)
+      if (req.body && req.body.jsonrpc === '2.0') {
+        const method = req.body.method;
+        if (method === 'initialize') {
+          return res.json({
+            jsonrpc: '2.0',
+            id: req.body.id ?? 1,
+            result: {
+              protocolVersion: '2024-11-05',
+              capabilities: {
+                tools: { listChanged: true },
+                resources: { subscribe: false, listChanged: true },
+                prompts: { listChanged: true }
+              },
+              serverInfo: {
+                name: 'booklist-mcp-server-http',
+                version: '1.0.0'
+              }
+            }
+          });
+        }
+        if (method === 'ping') {
+          return res.json({
+            jsonrpc: '2.0',
+            id: req.body.id ?? 1,
+            result: {}
+          });
+        }
+        return res.status(200).json({
+          jsonrpc: '2.0',
+          id: req.body.id ?? null,
+          error: {
+            code: -32000,
+            message: sessionId ? `MCP Session "${sessionId}" expired.` : 'Session ID required for stateful MCP calls. Connect via SSE endpoint /api/mcp/sse first.'
+          }
+        });
+      }
+
+      return res.status(404).json({ message: sessionId ? `MCP Session "${sessionId}" not found or expired.` : 'Missing sessionId query parameter.' });
     }
 
     try {
@@ -118,17 +156,18 @@ export function setupMcpSseRoutes(app) {
       // Otherwise return discovery JSON
       const base = getBaseUrl(req);
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Content-Type', 'application/json');
-      res.setHeader('WWW-Authenticate', `Bearer realm="mcp", resource_metadata="${base}/.well-known/oauth-protected-resource"`);
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('WWW-Authenticate', `Bearer realm="mcp", resource_metadata="${base}/api/.well-known/oauth-protected-resource"`);
       return res.json({
         name: 'BookList MCP Server',
         version: '1.0.0',
         protocols: ['mcp/1.0'],
         authentication: {
           type: 'oauth2',
-          authorization_url: `${base}/oauth/authorize`,
-          token_url: `${base}/oauth/token`,
-          discovery_url: `${base}/.well-known/oauth-authorization-server`
+          authorization_url: `${base}/api/oauth/authorize`,
+          token_url: `${base}/api/oauth/token`,
+          registration_url: `${base}/api/oauth/register`,
+          discovery_url: `${base}/api/.well-known/oauth-authorization-server`
         },
         transports: {
           sse: {
