@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import Sortable from 'sortablejs';
 import { useApp } from '../context/AppContext';
 import { uid, reorderSubset } from '../utils/constants';
-import { sharesAPI } from '../services/api';
+import { sharesAPI, boardAPI } from '../services/api';
 import {
   BackIcon, ShareIcon, TrashIcon, CheckIcon, StarIcon, XIcon,
   MicIcon, PlusIcon, ChevronRightIcon, ChevronDownIcon, CopyIcon,
@@ -290,6 +290,10 @@ export const ListView = () => {
 
     if (shareSid && isOwn) {
       sharesAPI.deleteShare(shareSid).catch(() => {});
+    }
+
+    if (isOwn) {
+      boardAPI.deleteList(activeList.id).catch(() => {});
     }
 
     const remaining = board.lists.filter(l => l.id !== activeList.id);

@@ -3,7 +3,7 @@ import { ACCENTS, starterBoard, PLANS, ymd, today0, uid } from '../utils/constan
 import { authAPI, boardAPI, notesAPI, sharesAPI, crmAPI, setToken, getToken } from '../services/api';
 
 const normalizeBoard = (b) => {
-  if (!b) return starterBoard();
+  if (!b) return { lists: [], notes: [], tab: 'lists', activeId: null, activeNoteId: null, updatedAt: Date.now() };
   const res = { ...b };
   if (!Array.isArray(res.lists)) res.lists = [];
   if (!Array.isArray(res.notes)) res.notes = [];
@@ -870,9 +870,10 @@ export const AppProvider = ({ children }) => {
 
           // Fetch board from MongoDB
           boardAPI.getBoard().then(remoteBoard => {
-            let normalized = starterBoard();
-            if (remoteBoard && Array.isArray(remoteBoard.lists)) {
-              normalized = normalizeBoard(remoteBoard);
+            let normalized = (remoteBoard && Array.isArray(remoteBoard.lists))
+              ? normalizeBoard(remoteBoard)
+              : null;
+            if (normalized) {
               setBoardState(normalized);
               const key = `listbook:board:${res.user.username || res.user.id}`;
               try { localStorage.setItem(key, JSON.stringify(normalized)); } catch {}
