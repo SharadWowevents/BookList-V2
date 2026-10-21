@@ -1,0 +1,46 @@
+name: Deploy to Hostinger VPS
+
+on:
+  push:
+    branches:
+      - main # Triggers deployment when you push to the main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          # Increase timeout for slow builds
+          timeout: 10m 
+          script: |
+            # 1. Navigate to your project directory
+            cd /var/www/BookList-V2
+            
+            # 2. Pull the latest code from GitHub
+            git fetch --all
+            git reset --hard origin/main
+            
+            # 3. Build the React Frontend
+            echo "Building Frontend..."
+            cd frontend
+            npm install
+            npm run build
+            cd ..
+            
+            # 4. Setup Backend and Restart
+            echo "Updating Backend..."
+            cd backend
+            npm install --production
+            
+            # 5. Restart PM2 and Nginx
+            echo "Restarting Services..."
+            pm2 restart all
+            sudo systemctl reload nginx
+            
+            echo "Deployment Successful!"
