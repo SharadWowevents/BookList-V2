@@ -99,8 +99,9 @@ export const AppProvider = ({ children }) => {
   const [pendingShareSid, setPendingShareSid] = useState(() => {
     try {
       const hash = window.location.hash || '';
+      if (!hash || hash.startsWith('#s.local.')) return null;
       const m = /^#s\.(?:([A-Za-z0-9_-]+)\.)?([a-z0-9]+)$/i.exec(hash);
-      if (m && m[2] && m[2] !== 'local') {
+      if (m && m[1] !== 'local' && m[2] && m[2] !== 'local') {
         sessionStorage.setItem('listbook:pending_share', m[2]);
         return m[2];
       }
@@ -717,9 +718,9 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash;
-      if (!hash) return;
+      if (!hash || hash.startsWith('#s.local.')) return;
       const m = /^#s\.(?:([A-Za-z0-9_-]+)\.)?([a-z0-9]+)$/i.exec(hash);
-      if (!m) return;
+      if (!m || m[1] === 'local') return;
       const sid = m[2];
       if (!sid || sid === 'local') return;
 

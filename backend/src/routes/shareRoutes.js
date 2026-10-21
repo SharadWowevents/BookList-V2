@@ -34,9 +34,9 @@ router.get('/stream', (req, res) => {
 router.get('/:sid', optionalAuth, getShare);
 router.put('/:sid', optionalAuth, updateShare);
 
-// Creating or deleting shares requires authentication
-router.post('/', protect, createShare);
-router.delete('/:sid', protect, deleteShare);
+// Creating or deleting shares with optional auth context
+router.post('/', optionalAuth, createShare);
+router.delete('/:sid', optionalAuth, deleteShare);
 
 export default router;
 

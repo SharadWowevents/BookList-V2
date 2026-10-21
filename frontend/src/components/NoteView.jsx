@@ -136,21 +136,30 @@ export const NoteView = () => {
 
   useEffect(() => {
     if (ui.sharing && activeNote?.id && !shareSid) {
-      sharesAPI.createShare({ itemId: activeNote.id, kind: 'note', mode: shareMode })
+      const curBody = loadNoteBody(activeNote.id);
+      sharesAPI.createShare({
+        itemId: activeNote.id,
+        kind: 'note',
+        mode: shareMode,
+        content: { title: activeNote.title, html: curBody?.html || '' },
+        ownerName: session?.name || 'You'
+      })
         .then(res => {
           if (res?.sid) {
             setShareSid(res.sid);
             updateBoard({
               notes: board.notes.map(n => n.id === activeNote.id ? {
                 ...n,
-                shared: { sid: res.sid, mode: res.mode, own: true, ownerName: session?.name || 'You' }
+                shared: { sid: res.sid, mode: res.mode, own: true, ownerName: res.ownerName || session?.name || 'You' }
               } : n)
             });
           }
         })
-        .catch(() => {});
+        .catch(err => {
+          console.error('Failed to create note share:', err);
+        });
     }
-  }, [ui.sharing, activeNote?.id, shareSid, shareMode, session?.name, updateBoard]);
+  }, [ui.sharing, activeNote?.id, activeNote?.title, shareSid, shareMode, session?.name, updateBoard, loadNoteBody]);
 
   // Extract clean HTML (without canvas contents) for storage
   const getEditorHTML = useCallback(() => {
@@ -1044,7 +1053,14 @@ ${pubAuthor ? `<div class="by">${avatarHtml}<span><b>${name}</b>${when ? ` • L
       if (shareSid) {
         await sharesAPI.updateShare(shareSid, { mode: newMode });
       } else {
-        const res = await sharesAPI.createShare({ itemId: activeNote.id, kind: 'note', mode: newMode });
+        const curBody = loadNoteBody(activeNote.id);
+        const res = await sharesAPI.createShare({
+          itemId: activeNote.id,
+          kind: 'note',
+          mode: newMode,
+          content: { title: activeNote.title, html: curBody?.html || '' },
+          ownerName: session?.name || 'You'
+        });
         if (res?.sid) setShareSid(res.sid);
       }
       updateBoard({
@@ -1077,33 +1093,37 @@ ${pubAuthor ? `<div class="by">${avatarHtml}<span><b>${name}</b>${when ? ` • L
     try {
       let sid = shareSid;
       if (!sid) {
-        const res = await sharesAPI.createShare({ itemId: activeNote.id, kind: 'note', mode: shareMode });
+        showToast('Generating share link…');
+        const curBody = loadNoteBody(activeNote.id);
+        const res = await sharesAPI.createShare({
+          itemId: activeNote.id,
+          kind: 'note',
+          mode: shareMode,
+          content: { title: activeNote.title, html: curBody?.html || '' },
+          ownerName: session?.name || 'You'
+        });
+        if (!res?.sid) throw new Error('No sid returned');
         sid = res.sid;
         setShareSid(sid);
         updateBoard({
           notes: board.notes.map(n => n.id === activeNote.id ? {
             ...n,
-            shared: { sid: res.sid, mode: res.mode, own: true, ownerName: session?.name || 'You' }
+            shared: { sid: res.sid, mode: res.mode, own: true, ownerName: res.ownerName || session?.name || 'You' }
           } : n)
         });
       }
       const url = `${window.location.origin}${window.location.pathname}#s.${sid}`;
       await navigator.clipboard.writeText(url);
-      showToast('Share link copied.');
-    } catch {
-      const url = `${window.location.origin}${window.location.pathname}#s.local.${activeNote.id}`;
-      try {
-        await navigator.clipboard.writeText(url);
-        showToast('Link copied.');
-      } catch {
-        showToast('Link: ' + url);
-      }
+      showToast('Share link copied to clipboard.');
+    } catch (err) {
+      console.error('Failed to copy note share link:', err);
+      showToast('Could not create share link. Please try again.');
     }
   };
 
   const shareUrl = shareSid
     ? `${window.location.origin}${window.location.pathname}#s.${shareSid}`
-    : `${window.location.origin}${window.location.pathname}#s.local.${activeNote?.id}`;
+    : 'Generating link…';
 
   const renderAvatar = () => {
     if (photo) {
