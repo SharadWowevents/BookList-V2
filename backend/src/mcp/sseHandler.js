@@ -6,7 +6,7 @@ import { McpAuthManager } from './auth.js';
 import { registerMcpTools } from './tools.js';
 import { registerMcpResources } from './resources.js';
 import { registerMcpPrompts } from './prompts.js';
-import { getBaseUrl } from './oauth.js';
+import { getBaseUrl, renderLoginPage, handleAuthorizePost } from './oauth.js';
 
 const transports = new Map();
 
@@ -204,7 +204,7 @@ export function setupMcpSseRoutes(app) {
   // Support /api/mcp/messages
   app.post('/api/mcp/messages', handlePostMessage);
 
-  // Support /api/mcp for both SSE, POST messages/discovery, and GET metadata
+  // Support /api/mcp for Browser UI (screenshot), SSE, Stateless POST, and Discovery JSON
   app.all('/api/mcp', async (req, res, next) => {
     if (req.method === 'OPTIONS') {
       res.setHeader('Access-Control-Allow-Origin', '*');
@@ -214,6 +214,11 @@ export function setupMcpSseRoutes(app) {
     }
 
     if (req.method === 'POST') {
+      // Check if this is an HTML form submission from the login page
+      const contentType = req.headers['content-type'] || '';
+      if (contentType.includes('application/x-www-form-urlencoded') || (req.body && !req.body.jsonrpc && req.body.username)) {
+        return handleAuthorizePost(req, res);
+      }
       return handlePostMessage(req, res);
     }
 
@@ -223,7 +228,21 @@ export function setupMcpSseRoutes(app) {
         return handleSseConnection(req, res);
       }
 
-      // Otherwise return discovery JSON
+      // If requested by a web browser expecting HTML, render the Auth card from the screenshot!
+      if (accept.includes('text/html') || (!accept.includes('application/json') && !req.headers['authorization'])) {
+        return res.send(renderLoginPage({
+          client_id: req.query.client_id || '',
+          redirect_uri: req.query.redirect_uri || '',
+          state: req.query.state || '',
+          code_challenge: req.query.code_challenge || '',
+          code_challenge_method: req.query.code_challenge_method || 'S256',
+          scope: req.query.scope || 'mcp:all',
+          username: req.query.username || '',
+          error: null
+        }));
+      }
+
+      // Otherwise return discovery JSON for API / MCP clients
       const base = getBaseUrl(req);
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
