@@ -21,6 +21,7 @@ export const GripIcon = ({ className = '' }) => (
   </svg>
 );
 
+
 export const CheckIcon = ({ size = 16, className = '' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="M5 12.5l4.5 4.5L19 7.5"/>
