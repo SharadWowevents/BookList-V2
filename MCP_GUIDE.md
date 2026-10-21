@@ -10,7 +10,7 @@ The MCP server connects directly to your MongoDB User collection and supports au
 
 ### Method A: Auto-Authentication via Environment Variables
 Set the following environment variables in your MCP client configuration:
-- `BOOKLIST_USERNAME`: Your user ID or username (e.g. `karan.patel`, `sharad`, `aditi rao`)
+- `BOOKLIST_USERNAME`: Your user ID or username (e.g. `aditi rao`)
 - `BOOKLIST_PASSWORD`: Your account password or 4-digit PIN
 
 When the MCP server starts up, it automatically validates your credentials against the User DB using bcrypt, verifies active account status, and scopes all actions to your private workspace.

@@ -584,7 +584,7 @@ function renderLoginPage({ client_id, redirect_uri, state, code_challenge, code_
 
       <div class="form-group">
         <label for="username">Username or User ID</label>
-        <input type="text" id="username" name="username" placeholder="e.g. aditi rao, karan.patel, sharad" required autofocus autocomplete="username">
+        <input type="text" id="username" name="username" placeholder="e.g. aditi rao" required autofocus autocomplete="username">
       </div>
 
       <div class="form-group">
