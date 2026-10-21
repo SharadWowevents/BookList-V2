@@ -10,6 +10,49 @@ import { getBaseUrl } from './oauth.js';
 
 const transports = new Map();
 
+// Helper to instantiate server for stateless HTTP requests (OpenAI action discovery and tool calls)
+const createStatelessServer = async (req) => {
+  const authManager = new McpAuthManager();
+  const authHeader = req.headers.authorization;
+  const token = req.query.token || (authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null);
+  const queryUser = req.query.username;
+  const queryPass = req.query.password;
+
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'mydeepwork_secret');
+      const user = await User.findById(decoded.id);
+      if (user && user.status === 'active') {
+        authManager.currentUser = user;
+      }
+    } catch (err) {
+      console.error('[MCP Stateless Auth Invalid]:', err.message);
+    }
+  } else if (queryUser && queryPass) {
+    await authManager.authenticate(queryUser, queryPass);
+  }
+
+  const server = new McpServer({
+    name: 'booklist-mcp-server-http',
+    version: '1.0.0'
+  });
+
+  registerMcpTools(server, authManager);
+  registerMcpResources(server, authManager);
+  registerMcpPrompts(server);
+
+  const mockTransport = {
+    start: async () => {},
+    onclose: null,
+    onerror: null,
+    onmessage: null,
+    send: async () => {}
+  };
+  await server.connect(mockTransport);
+
+  return { server, authManager };
+};
+
 export function setupMcpSseRoutes(app) {
   const handleSseConnection = async (req, res) => {
     try {
@@ -36,8 +79,6 @@ export function setupMcpSseRoutes(app) {
         await authManager.authenticate(queryUser, queryPass);
       }
 
-      // If client didn't authenticate, we still allow connection so tools like 'login' can be used,
-      // but we add WWW-Authenticate header so OAuth clients (like ChatGPT) discover the auth metadata
       res.setHeader('WWW-Authenticate', `Bearer realm="mcp", resource_metadata="${base}/api/.well-known/oauth-protected-resource"`);
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Headers', '*');
@@ -72,60 +113,89 @@ export function setupMcpSseRoutes(app) {
   const handlePostMessage = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', '*');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
     const sessionId = req.query.sessionId;
     const transport = sessionId ? transports.get(sessionId) : null;
 
-    if (!transport) {
-      // If it's a JSON-RPC probe (e.g. OpenAI / ping / initialize)
-      if (req.body && req.body.jsonrpc === '2.0') {
-        const method = req.body.method;
-        if (method === 'initialize') {
-          return res.json({
-            jsonrpc: '2.0',
-            id: req.body.id ?? 1,
-            result: {
-              protocolVersion: '2024-11-05',
-              capabilities: {
-                tools: { listChanged: true },
-                resources: { subscribe: false, listChanged: true },
-                prompts: { listChanged: true }
-              },
-              serverInfo: {
-                name: 'booklist-mcp-server-http',
-                version: '1.0.0'
-              }
-            }
-          });
+    if (transport) {
+      try {
+        await transport.handlePostMessage(req, res);
+      } catch (err) {
+        console.error('[MCP PostMessage Error]:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ message: 'Error handling MCP message.' });
         }
-        if (method === 'ping') {
-          return res.json({
-            jsonrpc: '2.0',
-            id: req.body.id ?? 1,
-            result: {}
-          });
-        }
-        return res.status(200).json({
+      }
+      return;
+    }
+
+    // Stateless Streamable HTTP handling (for OpenAI / ChatGPT discovery & direct calls)
+    if (req.body && req.body.jsonrpc === '2.0') {
+      const { id, method, params } = req.body;
+
+      if (method === 'initialize') {
+        return res.json({
           jsonrpc: '2.0',
-          id: req.body.id ?? null,
-          error: {
-            code: -32000,
-            message: sessionId ? `MCP Session "${sessionId}" expired.` : 'Session ID required for stateful MCP calls. Connect via SSE endpoint /api/mcp/sse first.'
+          id: id ?? 1,
+          result: {
+            protocolVersion: '2024-11-05',
+            capabilities: {
+              tools: { listChanged: true },
+              resources: { subscribe: false, listChanged: true },
+              prompts: { listChanged: true }
+            },
+            serverInfo: {
+              name: 'booklist-mcp-server-http',
+              version: '1.0.0'
+            }
           }
         });
       }
 
-      return res.status(404).json({ message: sessionId ? `MCP Session "${sessionId}" not found or expired.` : 'Missing sessionId query parameter.' });
-    }
+      if (method === 'ping') {
+        return res.json({
+          jsonrpc: '2.0',
+          id: id ?? 1,
+          result: {}
+        });
+      }
 
-    try {
-      await transport.handlePostMessage(req, res);
-    } catch (err) {
-      console.error('[MCP PostMessage Error]:', err);
-      if (!res.headersSent) {
-        res.status(500).json({ message: 'Error handling MCP message.' });
+      try {
+        const { server } = await createStatelessServer(req);
+        const handler = server.server._requestHandlers.get(method);
+
+        if (handler) {
+          const result = await handler({ method, params });
+          return res.json({
+            jsonrpc: '2.0',
+            id: id ?? 1,
+            result
+          });
+        }
+
+        return res.status(200).json({
+          jsonrpc: '2.0',
+          id: id ?? null,
+          error: {
+            code: -32601,
+            message: `Method "${method}" not found.`
+          }
+        });
+      } catch (err) {
+        console.error(`[MCP Stateless Method "${method}" Error]:`, err);
+        return res.status(200).json({
+          jsonrpc: '2.0',
+          id: id ?? null,
+          error: {
+            code: -32000,
+            message: err.message || 'Error processing MCP request.'
+          }
+        });
       }
     }
+
+    return res.status(404).json({ message: sessionId ? `MCP Session "${sessionId}" not found or expired.` : 'Missing sessionId query parameter.' });
   };
 
   // Support /api/mcp/sse
@@ -134,7 +204,7 @@ export function setupMcpSseRoutes(app) {
   // Support /api/mcp/messages
   app.post('/api/mcp/messages', handlePostMessage);
 
-  // Support /api/mcp for both SSE and JSON discovery depending on Accept header
+  // Support /api/mcp for both SSE, POST messages/discovery, and GET metadata
   app.all('/api/mcp', async (req, res, next) => {
     if (req.method === 'OPTIONS') {
       res.setHeader('Access-Control-Allow-Origin', '*');
