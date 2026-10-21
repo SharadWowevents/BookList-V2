@@ -55,3 +55,11 @@ export const adminOnly = (req, res, next) => {
     res.status(403).json({ message: 'Admin access required.' });
   }
 };
+
+export const crmOnly = (req, res, next) => {
+  if (req.user && (req.user.role === 'admin' || req.user.crm)) {
+    next();
+  } else {
+    res.status(403).json({ message: 'CRM access required. Contact your admin.' });
+  }
+};

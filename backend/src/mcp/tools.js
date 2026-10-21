@@ -4,6 +4,7 @@ import { List } from '../models/List.js';
 import { Note } from '../models/Note.js';
 import { User } from '../models/User.js';
 import { Share } from '../models/Share.js';
+import { CrmMember } from '../models/CrmMember.js';
 import { syncShareAcrossAllUsers } from '../utils/shareSync.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -1168,6 +1169,280 @@ export function registerMcpTools(server, authManager) {
           text: `Successfully renamed user @${oldU}: "${oldName}" ➔ "${user.name}"${uMsg}.`
         }]
       };
+    }
+  );
+
+  // ----------------------------------------------------
+  // 6. CRM (MEMBERS, PLANS, FOLLOW-UPS, SESSIONS) TOOLS
+  // ----------------------------------------------------
+  const requireCrmAccess = (authManager) => {
+    const user = authManager.currentUser;
+    if (!user) {
+      throw new Error('Not authenticated. Please call login first.');
+    }
+    if (user.role !== 'admin' && !user.crm) {
+      throw new Error('Permission denied. CRM access required.');
+    }
+    return user;
+  };
+
+  server.tool(
+    'crm_list_members',
+    'List all members in the CRM, with plan, start/end date, follow-ups, and session summary. Filterable by plan or search query.',
+    {
+      plan: z.string().optional().describe('Optional filter by plan name (Boardroom, QBR, FT 1, FT 2, FT 3, FT Continuity, Alumni)'),
+      search: z.string().optional().describe('Optional search query to match member name or mobile')
+    },
+    async ({ plan, search }) => {
+      try {
+        requireCrmAccess(authManager);
+        let query = {};
+        if (plan) query.plan = plan;
+        let members = await CrmMember.find(query).sort({ end: 1, name: 1 });
+        if (search && search.trim()) {
+          const q = search.trim().toLowerCase();
+          const qd = q.replace(/\D/g, '');
+          members = members.filter(m =>
+            m.name.toLowerCase().includes(q) || (qd && m.mobile.replace(/\D/g, '').includes(qd))
+          );
+        }
+
+        const formatted = members.map(m => ({
+          id: m.id,
+          name: m.name,
+          mobile: m.mobile,
+          plan: m.plan,
+          start: m.start,
+          end: m.end,
+          comment: m.comment,
+          lastSession: m.lastSession,
+          sessionCount: m.sessionCount,
+          pendingFollowUps: (m.followUps || []).filter(f => !f.done)
+        }));
+
+        return {
+          content: [{
+            type: 'text',
+            text: `Found ${formatted.length} CRM member(s):\n${JSON.stringify(formatted, null, 2)}`
+          }]
+        };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    'crm_add_member',
+    'Add a new member to the CRM with name, mobile, plan, start/end dates, and optional initial follow-up or comment.',
+    {
+      name: z.string().describe('Member full name'),
+      mobile: z.string().describe('Mobile phone number'),
+      plan: z.enum(["Boardroom", "QBR", "FT 1", "FT 2", "FT 3", "FT Continuity", "Alumni"]).default("Boardroom"),
+      start: z.string().optional().describe('Start date in YYYY-MM-DD format'),
+      end: z.string().optional().describe('End date in YYYY-MM-DD format'),
+      comment: z.string().optional().describe('Notes, context, or goals'),
+      followUpDate: z.string().optional().describe('Optional initial follow-up date (YYYY-MM-DD)'),
+      followUpNote: z.string().optional().describe('Optional initial follow-up note')
+    },
+    async ({ name, mobile, plan, start, end, comment, followUpDate, followUpNote }) => {
+      try {
+        const user = requireCrmAccess(authManager);
+        if (!name || !name.trim()) {
+          return { content: [{ type: 'text', text: 'Member name is required.' }], isError: true };
+        }
+
+        const newId = uid();
+        const followUps = [];
+        if (followUpDate) {
+          followUps.push({
+            id: uid(),
+            date: followUpDate,
+            note: followUpNote || '',
+            done: false,
+            by: user.username,
+            byName: user.name
+          });
+        }
+
+        const now = Date.now();
+        const member = new CrmMember({
+          id: newId,
+          name: name.trim(),
+          mobile: (mobile || '').trim(),
+          plan: plan || 'Boardroom',
+          start: start || '',
+          end: end || '',
+          comment: comment || '',
+          followUps,
+          sessions: [],
+          lastSession: '',
+          sessionCount: 0,
+          createdAt: now,
+          updatedAt: now,
+          updatedBy: user.username,
+          updatedByName: user.name
+        });
+
+        await member.save();
+        return {
+          content: [{
+            type: 'text',
+            text: `Added member "${member.name}" (ID: ${member.id}) under plan "${member.plan}".`
+          }]
+        };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    'crm_update_member',
+    'Update an existing CRM member details, change their plan/stage, or modify start/end dates.',
+    {
+      memberId: z.string().describe('Unique ID of the member to update'),
+      name: z.string().optional().describe('Updated name'),
+      mobile: z.string().optional().describe('Updated mobile number'),
+      plan: z.enum(["Boardroom", "QBR", "FT 1", "FT 2", "FT 3", "FT Continuity", "Alumni"]).optional(),
+      start: z.string().optional().describe('Start date (YYYY-MM-DD)'),
+      end: z.string().optional().describe('End date (YYYY-MM-DD)'),
+      comment: z.string().optional().describe('Updated comment')
+    },
+    async ({ memberId, name, mobile, plan, start, end, comment }) => {
+      try {
+        const user = requireCrmAccess(authManager);
+        const member = await CrmMember.findOne({ id: memberId });
+        if (!member) {
+          return { content: [{ type: 'text', text: `Member "${memberId}" not found.` }], isError: true };
+        }
+
+        if (name !== undefined) member.name = name.trim();
+        if (mobile !== undefined) member.mobile = mobile.trim();
+        if (plan !== undefined) member.plan = plan;
+        if (start !== undefined) member.start = start;
+        if (end !== undefined) member.end = end;
+        if (comment !== undefined) member.comment = comment;
+
+        member.updatedAt = Date.now();
+        member.updatedBy = user.username;
+        member.updatedByName = user.name;
+        await member.save();
+
+        return {
+          content: [{
+            type: 'text',
+            text: `Updated member "${member.name}" (${member.id}). Current plan: "${member.plan}".`
+          }]
+        };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    'crm_delete_member',
+    'Delete a member and all their sessions from the CRM.',
+    {
+      memberId: z.string().describe('Unique ID of the member to delete')
+    },
+    async ({ memberId }) => {
+      try {
+        requireCrmAccess(authManager);
+        const member = await CrmMember.findOne({ id: memberId });
+        if (!member) {
+          return { content: [{ type: 'text', text: `Member "${memberId}" not found.` }], isError: true };
+        }
+        await CrmMember.deleteOne({ id: memberId });
+        return {
+          content: [{
+            type: 'text',
+            text: `Deleted member "${member.name}" (${memberId}).`
+          }]
+        };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    'crm_add_session_note',
+    'Add a new session note / MoM / call log for a CRM member.',
+    {
+      memberId: z.string().describe('Unique ID of the member'),
+      date: z.string().describe('Date of session in YYYY-MM-DD format'),
+      type: z.enum(["Session", "MoM", "Review", "Call"]).default("Session"),
+      text: z.string().describe('Session notes, decisions, next steps, action items')
+    },
+    async ({ memberId, date, type, text }) => {
+      try {
+        const user = requireCrmAccess(authManager);
+        const member = await CrmMember.findOne({ id: memberId });
+        if (!member) {
+          return { content: [{ type: 'text', text: `Member "${memberId}" not found.` }], isError: true };
+        }
+        if (!text || !text.trim()) {
+          return { content: [{ type: 'text', text: 'Note text cannot be empty.' }], isError: true };
+        }
+
+        const now = Date.now();
+        const newSession = {
+          id: uid(),
+          date,
+          type: type || 'Session',
+          text: text.trim(),
+          by: user.username,
+          byName: user.name,
+          createdAt: now,
+          updatedAt: now
+        };
+
+        member.sessions.push(newSession);
+        member.sessionCount = member.sessions.length;
+        member.lastSession = member.sessions.reduce((latest, s) => (s.date > latest ? s.date : latest), '');
+        member.updatedAt = now;
+        member.updatedBy = user.username;
+        member.updatedByName = user.name;
+        await member.save();
+
+        return {
+          content: [{
+            type: 'text',
+            text: `Saved ${type} note for "${member.name}" on ${date}. Total sessions: ${member.sessionCount}.`
+          }]
+        };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    'crm_list_sessions',
+    'List all session notes and MoM history for a specific CRM member.',
+    {
+      memberId: z.string().describe('Unique ID of the member')
+    },
+    async ({ memberId }) => {
+      try {
+        requireCrmAccess(authManager);
+        const member = await CrmMember.findOne({ id: memberId });
+        if (!member) {
+          return { content: [{ type: 'text', text: `Member "${memberId}" not found.` }], isError: true };
+        }
+
+        const sessions = (member.sessions || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        return {
+          content: [{
+            type: 'text',
+            text: `Found ${sessions.length} session note(s) for "${member.name}":\n${JSON.stringify(sessions, null, 2)}`
+          }]
+        };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+      }
     }
   );
 }

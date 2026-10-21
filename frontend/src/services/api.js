@@ -135,6 +135,37 @@ export const adminAPI = {
   }),
   deleteUser: (username) => request('/admin/users/' + username, {
     method: 'DELETE'
+  }),
+  toggleUserCrm: (username) => request('/admin/users/' + encodeURIComponent(username) + '/crm', {
+    method: 'PUT'
+  })
+};
+
+export const crmAPI = {
+  getMembers: () => request('/crm/members'),
+  getMember: (id) => request('/crm/members/' + encodeURIComponent(id)),
+  createMember: (memberData) => request('/crm/members', {
+    method: 'POST',
+    body: JSON.stringify(memberData)
+  }),
+  updateMember: (id, memberData) => request('/crm/members/' + encodeURIComponent(id), {
+    method: 'PUT',
+    body: JSON.stringify(memberData)
+  }),
+  deleteMember: (id) => request('/crm/members/' + encodeURIComponent(id), {
+    method: 'DELETE'
+  }),
+  getSessions: (memberId) => request('/crm/members/' + encodeURIComponent(memberId) + '/sessions'),
+  addSession: (memberId, sessionData) => request('/crm/members/' + encodeURIComponent(memberId) + '/sessions', {
+    method: 'POST',
+    body: JSON.stringify(sessionData)
+  }),
+  updateSession: (memberId, sessionId, sessionData) => request('/crm/members/' + encodeURIComponent(memberId) + '/sessions/' + encodeURIComponent(sessionId), {
+    method: 'PUT',
+    body: JSON.stringify(sessionData)
+  }),
+  deleteSession: (memberId, sessionId) => request('/crm/members/' + encodeURIComponent(memberId) + '/sessions/' + encodeURIComponent(sessionId), {
+    method: 'DELETE'
   })
 };
 

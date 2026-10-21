@@ -8,6 +8,7 @@ import boardRoutes from './routes/boardRoutes.js';
 import noteRoutes from './routes/noteRoutes.js';
 import shareRoutes from './routes/shareRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import crmRoutes from './routes/crmRoutes.js';
 import { setupMcpSseRoutes } from './mcp/sseHandler.js';
 import { setupOAuthRoutes } from './mcp/oauth.js';
 
@@ -44,6 +45,7 @@ app.use('/api/board', boardRoutes);
 app.use('/api/notes', noteRoutes);
 app.use('/api/shares', shareRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/crm', crmRoutes);
 
 // Model Context Protocol (MCP) & OAuth Routes
 setupOAuthRoutes(app);

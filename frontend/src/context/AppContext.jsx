@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { ACCENTS, starterBoard } from '../utils/constants';
-import { authAPI, boardAPI, notesAPI, sharesAPI, setToken, getToken } from '../services/api';
+import { ACCENTS, starterBoard, PLANS, ymd, today0, uid } from '../utils/constants';
+import { authAPI, boardAPI, notesAPI, sharesAPI, crmAPI, setToken, getToken } from '../services/api';
 
 const normalizeBoard = (b) => {
   if (!b) return starterBoard();
@@ -11,6 +11,8 @@ const normalizeBoard = (b) => {
   res.notes = res.notes.filter(n => n && n.id);
   if (res.tab === 'note' || res.tab === 'notes') {
     res.tab = 'notes';
+  } else if (res.tab === 'crm') {
+    res.tab = 'crm';
   } else {
     res.tab = 'lists';
   }
@@ -136,6 +138,189 @@ export const AppProvider = ({ children }) => {
       setToast(prev => ({ ...prev, visible: false, undoFn: null }));
     }, ms);
   }, []);
+
+  // ----------------------------------------------------
+  // CRM STATE & ACTIONS
+  // ----------------------------------------------------
+  const [crmMembers, setCrmMembers] = useState([]);
+  const [crmLoaded, setCrmLoaded] = useState(false);
+  const [crmErr, setCrmErr] = useState('');
+  const [crmView, setCrmViewState] = useState(() => {
+    try {
+      return localStorage.getItem('listbook:crmView') || 'kanban';
+    } catch {
+      return 'kanban';
+    }
+  });
+  const setCrmView = (v) => {
+    setCrmViewState(v);
+    try { localStorage.setItem('listbook:crmView', v); } catch {}
+  };
+  const [crmFilter, setCrmFilter] = useState({ kind: 'all' });
+  const [crmSearch, setCrmSearch] = useState('');
+  const [crmModal, setCrmModal] = useState(null);
+
+  const isCrmAllowed = Boolean(session && (session.role === 'admin' || session.crm));
+
+  const loadCrmMembers = useCallback(async () => {
+    if (!getToken()) return;
+    try {
+      const res = await crmAPI.getMembers();
+      setCrmMembers(res.members || []);
+      setCrmLoaded(true);
+      setCrmErr('');
+    } catch (err) {
+      console.error('loadCrmMembers error:', err);
+      if (err.status === 403) {
+        setCrmMembers([]);
+        setCrmErr("You don't have access to the CRM.");
+      } else {
+        setCrmErr("Couldn't load members. Check connection.");
+      }
+      setCrmLoaded(true);
+    }
+  }, []);
+
+  const saveCrmMember = useCallback(async (memberData) => {
+    try {
+      let res;
+      if (memberData.id && crmMembers.some(m => m.id === memberData.id)) {
+        res = await crmAPI.updateMember(memberData.id, memberData);
+      } else {
+        res = await crmAPI.createMember(memberData);
+      }
+      const saved = res.member;
+      setCrmMembers(prev => {
+        const idx = prev.findIndex(m => m.id === saved.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = saved;
+          return next;
+        }
+        return [...prev, saved];
+      });
+      return saved;
+    } catch (err) {
+      console.error('saveCrmMember error:', err);
+      showToast(err.message || "Couldn't save member.");
+      return null;
+    }
+  }, [crmMembers, showToast]);
+
+  const deleteCrmMember = useCallback(async (memberId) => {
+    try {
+      await crmAPI.deleteMember(memberId);
+      setCrmMembers(prev => prev.filter(m => m.id !== memberId));
+      return true;
+    } catch (err) {
+      console.error('deleteCrmMember error:', err);
+      showToast(err.message || "Couldn't delete member.");
+      return false;
+    }
+  }, [showToast]);
+
+  const openCrmModal = useCallback((id = null, plan = null, tab = 'details') => {
+    const m = id ? crmMembers.find(x => x.id === id) : null;
+    const initialPlan = plan || (crmFilter.kind === 'plan' ? crmFilter.plan : PLANS[0]);
+    const draft = m
+      ? JSON.parse(JSON.stringify(m))
+      : {
+          id: uid(),
+          name: '',
+          mobile: '',
+          plan: initialPlan,
+          start: ymd(today0()),
+          end: '',
+          comment: '',
+          photo: '',
+          followUps: []
+        };
+
+    setCrmModal({
+      id: m ? m.id : null,
+      draft,
+      tab: tab || 'details',
+      sessions: m?.sessions || [],
+      sessLoaded: !m,
+      editing: null,
+      confirmSess: null,
+      confirmDel: false
+    });
+
+    if (m) {
+      crmAPI.getSessions(m.id).then(res => {
+        setCrmModal(cur => cur && cur.id === m.id ? { ...cur, sessions: res.sessions || [], sessLoaded: true } : cur);
+      }).catch(() => {
+        setCrmModal(cur => cur && cur.id === m.id ? { ...cur, sessLoaded: true } : cur);
+      });
+    }
+  }, [crmMembers, crmFilter]);
+
+  const closeCrmModal = useCallback(() => {
+    setCrmModal(null);
+  }, []);
+
+  const saveCrmSession = useCallback(async (memberId, sessData) => {
+    try {
+      let res;
+      if (sessData.id && crmModal?.sessions?.some(s => s.id === sessData.id)) {
+        res = await crmAPI.updateSession(memberId, sessData.id, sessData);
+      } else {
+        res = await crmAPI.addSession(memberId, sessData);
+      }
+      if (res && res.member) {
+        setCrmMembers(prev => prev.map(m => m.id === memberId ? res.member : m));
+        setCrmModal(cur => {
+          if (!cur || cur.id !== memberId) return cur;
+          const nextSessions = (res.member.sessions || []).slice().sort((a, b) => {
+            const dc = (b.date || '').localeCompare(a.date || '');
+            if (dc !== 0) return dc;
+            return (b.createdAt || 0) - (a.createdAt || 0);
+          });
+          return { ...cur, sessions: nextSessions, editing: null };
+        });
+      }
+      return true;
+    } catch (err) {
+      console.error('saveCrmSession error:', err);
+      showToast(err.message || "Couldn't save session note.");
+      return false;
+    }
+  }, [crmModal, showToast]);
+
+  const deleteCrmSession = useCallback(async (memberId, sessionId) => {
+    try {
+      const res = await crmAPI.deleteSession(memberId, sessionId);
+      if (res && res.member) {
+        setCrmMembers(prev => prev.map(m => m.id === memberId ? res.member : m));
+        setCrmModal(cur => {
+          if (!cur || cur.id !== memberId) return cur;
+          const nextSessions = (res.member.sessions || []).slice().sort((a, b) => {
+            const dc = (b.date || '').localeCompare(a.date || '');
+            if (dc !== 0) return dc;
+            return (b.createdAt || 0) - (a.createdAt || 0);
+          });
+          return { ...cur, sessions: nextSessions, confirmSess: null };
+        });
+      }
+      return true;
+    } catch (err) {
+      console.error('deleteCrmSession error:', err);
+      showToast(err.message || "Couldn't delete session note.");
+      return false;
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    if (isCrmAllowed) {
+      loadCrmMembers();
+      const interval = setInterval(loadCrmMembers, 15000);
+      return () => clearInterval(interval);
+    } else {
+      setCrmMembers([]);
+      setCrmLoaded(false);
+    }
+  }, [isCrmAllowed, loadCrmMembers]);
 
   const triggerUndo = useCallback(() => {
     if (toast.undoFn) {
@@ -831,7 +1016,26 @@ export const AppProvider = ({ children }) => {
       saveNoteBody,
       deleteNoteBody,
       pendingShareSid,
-      ingestShare
+      ingestShare,
+      crmMembers,
+      crmLoaded,
+      crmErr,
+      crmView,
+      setCrmView,
+      crmFilter,
+      setCrmFilter,
+      crmSearch,
+      setCrmSearch,
+      crmModal,
+      setCrmModal,
+      isCrmAllowed,
+      loadCrmMembers,
+      saveCrmMember,
+      deleteCrmMember,
+      openCrmModal,
+      closeCrmModal,
+      saveCrmSession,
+      deleteCrmSession
     }}>
       {children}
     </AppContext.Provider>

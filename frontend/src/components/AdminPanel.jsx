@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { adminAPI } from '../services/api';
 import {
   BackIcon, KeyIcon, PauseIcon, PlayIcon, TrashIcon, RefreshIcon,
-  EyeIcon, CopyIcon, PencilIcon, XIcon
+  EyeIcon, CopyIcon, PencilIcon, XIcon, CrmIcon
 } from './Icons';
 
 const WORDS = "amber,atlas,bloom,cedar,coral,delta,ember,fable,grove,harbor,indigo,juniper,lotus,maple,meadow,nova,orbit,pebble,quartz,river,saffron,summit,tango,tidal,velvet,willow,zephyr,canyon,falcon,lagoon".split(",");
@@ -239,6 +239,19 @@ export const AdminPanel = () => {
     }
   };
 
+  const handleToggleCrm = async (targetUsername) => {
+    try {
+      const res = await adminAPI.toggleUserCrm(targetUsername);
+      setTeamUsers(prev => prev.map(u => u.u === targetUsername ? { ...u, crm: res.crm } : u));
+      if (session?.username === targetUsername) {
+        setSession({ ...session, crm: res.crm });
+      }
+      showToast(res.crm ? `${res.name || targetUsername} can now use the CRM.` : `${res.name || targetUsername} no longer sees the CRM.`);
+    } catch {
+      showToast('Could not update CRM access.');
+    }
+  };
+
   const activeCount = teamUsers.filter(u => u.status === 'active').length;
   const filteredUsers = teamUsers.filter(u =>
     !searchQuery ||
@@ -411,7 +424,10 @@ export const AdminPanel = () => {
 
           <section className="card">
             <div className="people-head">
-              <div className="card-title">Team</div>
+              <div>
+                <div className="card-title">Team</div>
+                <p className="card-note">Tap <b>CRM</b> to choose who can see the CRM. Admins always can.</p>
+              </div>
               {teamUsers.length > 4 && (
                 <input
                   className="input search"
@@ -561,6 +577,16 @@ export const AdminPanel = () => {
                         </>
                       ) : (
                         <>
+                          <button
+                            type="button"
+                            className={`crm-chip ${u.crm ? 'on' : ''}`}
+                            onClick={() => handleToggleCrm(u.u)}
+                            aria-pressed={!!u.crm}
+                            title={u.crm ? "Has CRM access. Tap to remove." : "No CRM access. Tap to give access."}
+                          >
+                            <CrmIcon size={16} />
+                            <span>CRM</span>
+                          </button>
                           <button
                             type="button"
                             className="icon-btn"

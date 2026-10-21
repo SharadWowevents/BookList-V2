@@ -3,6 +3,8 @@ import { AppProvider, useApp } from './context/AppContext';
 import { Sidebar } from './components/Sidebar';
 import { ListView } from './components/ListView';
 import { NoteView } from './components/NoteView';
+import { CrmView } from './components/CrmView';
+import { CrmModal } from './components/CrmModal';
 import { AdminPanel } from './components/AdminPanel';
 import { Login } from './components/Login';
 import { PublicNoteView } from './components/PublicNoteView';
@@ -57,12 +59,15 @@ const Shell = () => {
       <main className="main">
         {ui.admin && session?.role === 'admin' ? (
           <AdminPanel />
+        ) : board.tab === 'crm' ? (
+          <CrmView />
         ) : board.tab === 'lists' ? (
           <ListView key={board.activeId} />
         ) : (
           <NoteView key={board.activeNoteId} />
         )}
       </main>
+      <CrmModal />
       {toast.visible && (
         <div id="toast" className="toast">
           {toast.message}

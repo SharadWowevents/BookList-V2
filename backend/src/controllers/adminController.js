@@ -47,6 +47,7 @@ export const getUsers = async (req, res) => {
         name: u.name,
         status: u.status,
         role: u.role,
+        crm: !!u.crm,
         authType: u.authType,
         lastSeen: u.lastSeen,
         createdAt: u.createdAt
@@ -125,11 +126,32 @@ export const createUser = async (req, res) => {
       name: newUser.name,
       status: newUser.status,
       role: newUser.role,
+      crm: !!newUser.crm,
       createdAt: newUser.createdAt
     });
   } catch (err) {
     console.error('createUser error:', err);
     res.status(500).json({ message: 'Error creating team user.' });
+  }
+};
+
+export const toggleUserCrm = async (req, res) => {
+  try {
+    const { username } = req.params;
+    const user = await User.findOne({ username: username.toLowerCase() });
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    user.crm = !user.crm;
+    await user.save();
+
+    res.json({
+      u: user.username,
+      name: user.name,
+      crm: user.crm
+    });
+  } catch (err) {
+    console.error('toggleUserCrm error:', err);
+    res.status(500).json({ message: 'Error updating CRM access.' });
   }
 };
 
@@ -245,6 +267,7 @@ export const renameUser = async (req, res) => {
         name: user.name,
         status: user.status,
         role: user.role,
+        crm: !!user.crm,
         authType: user.authType,
         lastSeen: user.lastSeen,
         createdAt: user.createdAt

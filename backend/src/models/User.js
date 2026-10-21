@@ -37,6 +37,10 @@ const userSchema = new mongoose.Schema({
     enum: ['admin', 'member'],
     default: 'member'
   },
+  crm: {
+    type: Boolean,
+    default: false
+  },
   photo: {
     type: String,
     default: null
@@ -56,7 +60,7 @@ const userSchema = new mongoose.Schema({
   },
   tab: {
     type: String,
-    enum: ['lists', 'notes'],
+    enum: ['lists', 'notes', 'crm'],
     default: 'lists'
   },
   lastSeen: {

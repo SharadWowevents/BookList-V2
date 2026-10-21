@@ -118,6 +118,7 @@ export const pinLogin = async (req, res) => {
         username: user.username,
         name: user.name,
         role: user.role,
+        crm: !!user.crm,
         photo: user.photo,
         prefs: user.prefs,
         activeId: user.activeId,
@@ -173,6 +174,7 @@ export const teamLogin = async (req, res) => {
         username: user.username,
         name: user.name,
         role: user.role,
+        crm: !!user.crm,
         photo: user.photo,
         prefs: user.prefs,
         activeId: user.activeId,
@@ -193,6 +195,7 @@ export const getMe = async (req, res) => {
       username: req.user.username,
       name: req.user.name,
       role: req.user.role,
+      crm: !!req.user.crm,
       photo: req.user.photo,
       prefs: req.user.prefs,
       activeId: req.user.activeId,
@@ -214,7 +217,7 @@ export const updateProfile = async (req, res) => {
     if (prefs) user.prefs = { ...user.prefs, ...prefs };
     if (activeId !== undefined) user.activeId = activeId;
     if (activeNoteId !== undefined) user.activeNoteId = activeNoteId;
-    if (tab && ['lists', 'notes'].includes(tab)) user.tab = tab;
+    if (tab && ['lists', 'notes', 'crm'].includes(tab)) user.tab = tab;
 
     await user.save();
 
@@ -224,6 +227,7 @@ export const updateProfile = async (req, res) => {
         username: user.username,
         name: user.name,
         role: user.role,
+        crm: !!user.crm,
         photo: user.photo,
         prefs: user.prefs,
         activeId: user.activeId,

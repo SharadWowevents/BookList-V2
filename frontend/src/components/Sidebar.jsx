@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import Sortable from 'sortablejs';
 import { useApp } from '../context/AppContext';
-import { ACCENTS, uid, reorderSubset } from '../utils/constants';
+import { ACCENTS, uid, reorderSubset, PLANS, crmMatches } from '../utils/constants';
 import {
   PlusIcon, StarIcon, GripIcon, PanelIcon, ListPlusIcon, NotePlusIcon,
   ListsIcon, NotesIcon, GearIcon, SunIcon, MoonIcon, MonitorIcon,
-  LogoutIcon, ShieldIcon, CameraIcon, EyeIcon, UsersIcon
+  LogoutIcon, ShieldIcon, CameraIcon, EyeIcon, UsersIcon, CrmIcon
 } from './Icons';
 
 export const Sidebar = () => {
@@ -13,7 +13,8 @@ export const Sidebar = () => {
     board, updateBoard, ui, setUi, session, signOut,
     accent, setAccent, theme, setTheme,
     collapsed, setCollapsed, photo, savePhoto, removePhoto,
-    showToast
+    showToast,
+    crmMembers, crmFilter, setCrmFilter, isCrmAllowed
   } = useApp();
 
   const isAdmin = session?.role === 'admin';
@@ -349,6 +350,40 @@ export const Sidebar = () => {
     </div>
   );
 
+  const renderCrmSide = () => {
+    const all = crmMembers || [];
+    const count = fl => all.filter(m => crmMatches(m, fl)).length;
+
+    const row = (fl, label, n, warn) => {
+      const on = crmFilter.kind === fl.kind && (fl.kind !== "plan" || crmFilter.plan === fl.plan);
+      return (
+        <button
+          key={fl.kind + (fl.plan || '')}
+          type="button"
+          className={`crm-filter ${on ? 'active' : ''}`}
+          onClick={() => {
+            setCrmFilter(fl.kind === 'plan' ? { kind: 'plan', plan: fl.plan } : { kind: fl.kind });
+            setUi(prev => ({ ...prev, viewing: true }));
+          }}
+        >
+          <span className="list-name">{label}</span>
+          <span className={`count ${warn && n ? 'warn' : ''}`}>{n}</span>
+        </button>
+      );
+    };
+
+    return (
+      <>
+        {row({ kind: 'all' }, 'All members', all.length)}
+        {row({ kind: 'expiring' }, 'Expiring in 30 days', count({ kind: 'expiring' }), true)}
+        {row({ kind: 'due' }, 'Follow-ups due', count({ kind: 'due' }), true)}
+        {row({ kind: 'expired' }, 'Expired', count({ kind: 'expired' }), true)}
+        <div className="sec-label">Plans</div>
+        {PLANS.map(p => row({ kind: 'plan', plan: p }, p, count({ kind: 'plan', plan: p })))}
+      </>
+    );
+  };
+
   // Collapsed rail view
   if (collapsed) {
     return (
@@ -403,6 +438,17 @@ export const Sidebar = () => {
         >
           <NotesIcon />
         </button>
+        {isCrmAllowed && (
+          <button
+            type="button"
+            className={`hbtn ${board.tab === 'crm' && !ui.admin ? 'on' : ''}`}
+            title="CRM"
+            aria-label="CRM"
+            onClick={() => updateBoard({ tab: 'crm' })}
+          >
+            <CrmIcon />
+          </button>
+        )}
         {isAdmin && (
           <button
             type="button"
@@ -509,7 +555,7 @@ export const Sidebar = () => {
           </form>
         )}
 
-        <div className="tabs" role="tablist">
+        <div className={`tabs ${isCrmAllowed ? 'three' : ''}`} role="tablist">
           <button
             type="button"
             className={`tab ${board.tab === 'lists' && !ui.admin ? 'on' : ''}`}
@@ -536,11 +582,30 @@ export const Sidebar = () => {
             <NotesIcon />
             <span className="n">{board.notes.length}</span>
           </button>
+          {isCrmAllowed && (
+            <button
+              type="button"
+              className={`tab ${board.tab === 'crm' && !ui.admin ? 'on' : ''}`}
+              role="tab"
+              aria-selected={board.tab === 'crm' && !ui.admin}
+              onClick={() => {
+                updateBoard({ tab: 'crm' });
+                setUi(prev => ({ ...prev, admin: false, adding: false }));
+              }}
+            >
+              <CrmIcon />
+              <span className="n">{crmMembers.length}</span>
+            </button>
+          )}
         </div>
       </div>
 
       <div className="lists">
-        {board.tab === 'lists' ? renderItems(board.lists, 'lists') : renderItems(board.notes, 'notes')}
+        {board.tab === 'crm'
+          ? renderCrmSide()
+          : board.tab === 'lists'
+          ? renderItems(board.lists, 'lists')
+          : renderItems(board.notes, 'notes')}
       </div>
 
       <div className="side-foot">
@@ -554,7 +619,7 @@ export const Sidebar = () => {
           {renderAvatar()}
           <span className="me-text">
             <span className="me-name">{session?.name || 'You'}</span>
-            <span className="me-sub">Saved locally</span>
+            <span className="me-sub">{session?.username ? `@${session.username}` : 'Saved locally'}</span>
           </span>
         </button>
         <button
