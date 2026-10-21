@@ -1172,6 +1172,31 @@ export function registerMcpTools(server, authManager) {
     }
   );
 
+  server.tool(
+    'admin_toggle_user_crm',
+    'Enable or disable CRM access for a specific team user (admin only).',
+    {
+      username: z.string().describe('Target username to toggle CRM access for')
+    },
+    async ({ username }) => {
+      authManager.requireAdmin();
+      const target = await User.findOne({ username: username.trim().toLowerCase() });
+      if (!target) {
+        return { content: [{ type: 'text', text: `User "@${username}" not found.` }], isError: true };
+      }
+
+      target.crm = !target.crm;
+      await target.save();
+
+      return {
+        content: [{
+          type: 'text',
+          text: `User @${target.username} (${target.name}) CRM access is now ${target.crm ? 'ENABLED' : 'DISABLED'}.`
+        }]
+      };
+    }
+  );
+
   // ----------------------------------------------------
   // 6. CRM (MEMBERS, PLANS, FOLLOW-UPS, SESSIONS) TOOLS
   // ----------------------------------------------------
@@ -1186,12 +1211,92 @@ export function registerMcpTools(server, authManager) {
     return user;
   };
 
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const parseYMD = v => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || "");
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+  };
+  const today0 = () => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+  const calcTimeLeft = (end) => {
+    const e = parseYMD(end);
+    if (!e) return null;
+    const t = today0();
+    const days = Math.round((e - t) / 864e5);
+    return {
+      days,
+      label: days === 0 ? "Expires today" : days > 0 ? `${days} day(s) left` : `Expired ${Math.abs(days)} day(s) ago`,
+      status: days < 0 ? "expired" : days <= 30 ? "soon" : "ok"
+    };
+  };
+  const waLink = mobile => {
+    let d = (mobile || "").replace(/\D/g, "");
+    if (d.length === 10) d = "91" + d;
+    return d.length >= 11 ? `https://wa.me/${d}` : "";
+  };
+
+  server.tool(
+    'crm_get_stats',
+    'Get aggregated statistics and KPIs for the CRM: member totals, plan distribution, expiring count, and pending follow-ups.',
+    {},
+    async () => {
+      try {
+        requireCrmAccess(authManager);
+        const members = await CrmMember.find({});
+        const todayStr = ymd(today0());
+        const planCounts = {};
+        let expiringSoon = 0;
+        let expired = 0;
+        let dueFollowUps = 0;
+        let totalSessions = 0;
+
+        for (const m of members) {
+          planCounts[m.plan] = (planCounts[m.plan] || 0) + 1;
+          totalSessions += (m.sessionCount || 0);
+
+          const tl = calcTimeLeft(m.end);
+          if (tl) {
+            if (tl.status === 'expired') expired++;
+            else if (tl.status === 'soon') expiringSoon++;
+          }
+
+          for (const f of m.followUps || []) {
+            if (!f.done && f.date && f.date <= todayStr) {
+              dueFollowUps++;
+            }
+          }
+        }
+
+        const stats = {
+          totalMembers: members.length,
+          plans: planCounts,
+          expiringIn30Days: expiringSoon,
+          alreadyExpired: expired,
+          dueOrOverdueFollowUps: dueFollowUps,
+          totalSessionNotes: totalSessions
+        };
+
+        return {
+          content: [{
+            type: 'text',
+            text: `CRM Metrics Overview:\n${JSON.stringify(stats, null, 2)}`
+          }]
+        };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
   server.tool(
     'crm_list_members',
-    'List all members in the CRM, with plan, start/end date, follow-ups, and session summary. Filterable by plan or search query.',
+    'List all members in the CRM with plan, start/end date, expiry info, follow-ups, and session summary. Supports filtering by plan or searching by name/mobile.',
     {
-      plan: z.string().optional().describe('Optional filter by plan name (Boardroom, QBR, FT 1, FT 2, FT 3, FT Continuity, Alumni)'),
-      search: z.string().optional().describe('Optional search query to match member name or mobile')
+      plan: z.string().optional().describe('Filter by plan name (Boardroom, QBR, FT 1, FT 2, FT 3, FT Continuity, Alumni)'),
+      search: z.string().optional().describe('Search term for member name or phone number')
     },
     async ({ plan, search }) => {
       try {
@@ -1207,23 +1312,79 @@ export function registerMcpTools(server, authManager) {
           );
         }
 
-        const formatted = members.map(m => ({
-          id: m.id,
-          name: m.name,
-          mobile: m.mobile,
-          plan: m.plan,
-          start: m.start,
-          end: m.end,
-          comment: m.comment,
-          lastSession: m.lastSession,
-          sessionCount: m.sessionCount,
-          pendingFollowUps: (m.followUps || []).filter(f => !f.done)
-        }));
+        const formatted = members.map(m => {
+          const tl = calcTimeLeft(m.end);
+          return {
+            id: m.id,
+            name: m.name,
+            mobile: m.mobile,
+            whatsapp: waLink(m.mobile),
+            plan: m.plan,
+            start: m.start,
+            end: m.end,
+            timeLeft: tl ? tl.label : null,
+            status: tl ? tl.status : 'ok',
+            comment: m.comment,
+            lastSession: m.lastSession,
+            sessionCount: m.sessionCount,
+            pendingFollowUps: (m.followUps || []).filter(f => !f.done).map(f => ({
+              id: f.id,
+              date: f.date,
+              note: f.note
+            }))
+          };
+        });
 
         return {
           content: [{
             type: 'text',
             text: `Found ${formatted.length} CRM member(s):\n${JSON.stringify(formatted, null, 2)}`
+          }]
+        };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    'crm_get_member',
+    'Retrieve full profile and history for a single CRM member by ID, including all follow-ups and all recorded session notes.',
+    {
+      memberId: z.string().describe('Unique ID of the member')
+    },
+    async ({ memberId }) => {
+      try {
+        requireCrmAccess(authManager);
+        const member = await CrmMember.findOne({ id: memberId });
+        if (!member) {
+          return { content: [{ type: 'text', text: `Member "${memberId}" not found.` }], isError: true };
+        }
+
+        const tl = calcTimeLeft(member.end);
+        const data = {
+          id: member.id,
+          name: member.name,
+          mobile: member.mobile,
+          whatsapp: waLink(member.mobile),
+          plan: member.plan,
+          start: member.start,
+          end: member.end,
+          timeLeft: tl ? tl.label : null,
+          status: tl ? tl.status : 'ok',
+          comment: member.comment,
+          followUps: member.followUps || [],
+          sessions: (member.sessions || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')),
+          lastSession: member.lastSession,
+          sessionCount: member.sessionCount,
+          updatedAt: member.updatedAt,
+          updatedBy: member.updatedByName || member.updatedBy
+        };
+
+        return {
+          content: [{
+            type: 'text',
+            text: `CRM Member Profile:\n${JSON.stringify(data, null, 2)}`
           }]
         };
       } catch (err) {
@@ -1368,6 +1529,236 @@ export function registerMcpTools(server, authManager) {
   );
 
   server.tool(
+    'crm_add_followup',
+    'Add a new follow-up reminder/task to a CRM member.',
+    {
+      memberId: z.string().describe('Unique ID of the member'),
+      date: z.string().describe('Follow-up target date (YYYY-MM-DD)'),
+      note: z.string().describe('Follow-up description or task')
+    },
+    async ({ memberId, date, note }) => {
+      try {
+        const user = requireCrmAccess(authManager);
+        const member = await CrmMember.findOne({ id: memberId });
+        if (!member) {
+          return { content: [{ type: 'text', text: `Member "${memberId}" not found.` }], isError: true };
+        }
+
+        const newFu = {
+          id: uid(),
+          date,
+          note: note.trim(),
+          done: false,
+          by: user.username,
+          byName: user.name
+        };
+
+        member.followUps.push(newFu);
+        member.updatedAt = Date.now();
+        await member.save();
+
+        return {
+          content: [{
+            type: 'text',
+            text: `Added follow-up to "${member.name}" for ${date}: "${note}".`
+          }]
+        };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    'crm_toggle_followup',
+    'Toggle or set the completed status of a follow-up item.',
+    {
+      memberId: z.string().describe('Unique ID of the member'),
+      followUpId: z.string().describe('Unique ID of the follow-up'),
+      done: z.boolean().optional().describe('True to mark completed, false for pending (omitting toggles)')
+    },
+    async ({ memberId, followUpId, done }) => {
+      try {
+        requireCrmAccess(authManager);
+        const member = await CrmMember.findOne({ id: memberId });
+        if (!member) {
+          return { content: [{ type: 'text', text: `Member "${memberId}" not found.` }], isError: true };
+        }
+
+        const fu = (member.followUps || []).find(f => f.id === followUpId);
+        if (!fu) {
+          return { content: [{ type: 'text', text: `Follow-up "${followUpId}" not found on member.` }], isError: true };
+        }
+
+        fu.done = done !== undefined ? done : !fu.done;
+        member.updatedAt = Date.now();
+        await member.save();
+
+        return {
+          content: [{
+            type: 'text',
+            text: `Follow-up "${fu.note || fu.id}" marked as ${fu.done ? 'COMPLETED' : 'PENDING'}.`
+          }]
+        };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    'crm_delete_followup',
+    'Delete a follow-up item from a member.',
+    {
+      memberId: z.string().describe('Unique ID of the member'),
+      followUpId: z.string().describe('Unique ID of the follow-up')
+    },
+    async ({ memberId, followUpId }) => {
+      try {
+        requireCrmAccess(authManager);
+        const member = await CrmMember.findOne({ id: memberId });
+        if (!member) {
+          return { content: [{ type: 'text', text: `Member "${memberId}" not found.` }], isError: true };
+        }
+
+        member.followUps = (member.followUps || []).filter(f => f.id !== followUpId);
+        member.updatedAt = Date.now();
+        await member.save();
+
+        return {
+          content: [{
+            type: 'text',
+            text: `Deleted follow-up "${followUpId}" from member "${member.name}".`
+          }]
+        };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    'crm_list_due_followups',
+    'List all pending and overdue follow-ups across all members (ideal for daily morning briefings).',
+    {
+      daysAhead: z.number().optional().default(0).describe('Include follow-ups due in the next N days (default 0: today and overdue only)')
+    },
+    async ({ daysAhead = 0 }) => {
+      try {
+        requireCrmAccess(authManager);
+        const targetDate = new Date();
+        targetDate.setDate(targetDate.getDate() + daysAhead);
+        const targetStr = ymd(targetDate);
+        const todayStr = ymd(today0());
+
+        const members = await CrmMember.find({});
+        const due = [];
+
+        for (const m of members) {
+          for (const f of m.followUps || []) {
+            if (!f.done && f.date && f.date <= targetStr) {
+              due.push({
+                memberId: m.id,
+                memberName: m.name,
+                mobile: m.mobile,
+                whatsapp: waLink(m.mobile),
+                plan: m.plan,
+                followUpId: f.id,
+                date: f.date,
+                note: f.note,
+                isOverdue: f.date < todayStr,
+                isDueToday: f.date === todayStr
+              });
+            }
+          }
+        }
+
+        due.sort((a, b) => a.date.localeCompare(b.date));
+
+        return {
+          content: [{
+            type: 'text',
+            text: `Found ${due.length} due or overdue follow-up(s):\n${JSON.stringify(due, null, 2)}`
+          }]
+        };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    'crm_list_expiring_members',
+    'List members whose plan is expiring soon or has already expired.',
+    {
+      days: z.number().optional().default(30).describe('Check expiry within the next N days (default 30)')
+    },
+    async ({ days = 30 }) => {
+      try {
+        requireCrmAccess(authManager);
+        const members = await CrmMember.find({});
+        const results = [];
+
+        for (const m of members) {
+          const tl = calcTimeLeft(m.end);
+          if (tl && tl.days <= days) {
+            results.push({
+              id: m.id,
+              name: m.name,
+              mobile: m.mobile,
+              whatsapp: waLink(m.mobile),
+              plan: m.plan,
+              start: m.start,
+              end: m.end,
+              daysRemaining: tl.days,
+              label: tl.label,
+              status: tl.status
+            });
+          }
+        }
+
+        results.sort((a, b) => a.daysRemaining - b.daysRemaining);
+
+        return {
+          content: [{
+            type: 'text',
+            text: `Found ${results.length} member(s) expiring within ${days} days or expired:\n${JSON.stringify(results, null, 2)}`
+          }]
+        };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    'crm_list_sessions',
+    'List all session notes, MoMs, and call logs for a specific CRM member.',
+    {
+      memberId: z.string().describe('Unique ID of the member')
+    },
+    async ({ memberId }) => {
+      try {
+        requireCrmAccess(authManager);
+        const member = await CrmMember.findOne({ id: memberId });
+        if (!member) {
+          return { content: [{ type: 'text', text: `Member "${memberId}" not found.` }], isError: true };
+        }
+
+        const sessions = (member.sessions || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        return {
+          content: [{
+            type: 'text',
+            text: `Found ${sessions.length} session note(s) for "${member.name}":\n${JSON.stringify(sessions, null, 2)}`
+          }]
+        };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
     'crm_add_session_note',
     'Add a new session note / MoM / call log for a CRM member.',
     {
@@ -1420,24 +1811,83 @@ export function registerMcpTools(server, authManager) {
   );
 
   server.tool(
-    'crm_list_sessions',
-    'List all session notes and MoM history for a specific CRM member.',
+    'crm_update_session_note',
+    'Update an existing session note on a CRM member.',
     {
-      memberId: z.string().describe('Unique ID of the member')
+      memberId: z.string().describe('Unique ID of the member'),
+      sessionId: z.string().describe('Unique ID of the session note'),
+      date: z.string().optional().describe('Updated date (YYYY-MM-DD)'),
+      type: z.enum(["Session", "MoM", "Review", "Call"]).optional(),
+      text: z.string().optional().describe('Updated session text')
     },
-    async ({ memberId }) => {
+    async ({ memberId, sessionId, date, type, text }) => {
       try {
-        requireCrmAccess(authManager);
+        const user = requireCrmAccess(authManager);
         const member = await CrmMember.findOne({ id: memberId });
         if (!member) {
           return { content: [{ type: 'text', text: `Member "${memberId}" not found.` }], isError: true };
         }
 
-        const sessions = (member.sessions || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        const sess = (member.sessions || []).find(s => s.id === sessionId);
+        if (!sess) {
+          return { content: [{ type: 'text', text: `Session note "${sessionId}" not found.` }], isError: true };
+        }
+
+        if (date !== undefined) sess.date = date;
+        if (type !== undefined) sess.type = type;
+        if (text !== undefined) {
+          if (!text.trim()) {
+            return { content: [{ type: 'text', text: 'Note text cannot be empty. Use crm_delete_session_note instead.' }], isError: true };
+          }
+          sess.text = text.trim();
+        }
+        sess.updatedAt = Date.now();
+
+        member.lastSession = member.sessions.reduce((latest, s) => (s.date > latest ? s.date : latest), '');
+        member.updatedAt = Date.now();
+        member.updatedBy = user.username;
+        member.updatedByName = user.name;
+        await member.save();
+
         return {
           content: [{
             type: 'text',
-            text: `Found ${sessions.length} session note(s) for "${member.name}":\n${JSON.stringify(sessions, null, 2)}`
+            text: `Updated session note (${sessionId}) for "${member.name}".`
+          }]
+        };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    'crm_delete_session_note',
+    'Delete a specific session note from a CRM member.',
+    {
+      memberId: z.string().describe('Unique ID of the member'),
+      sessionId: z.string().describe('Unique ID of the session note to delete')
+    },
+    async ({ memberId, sessionId }) => {
+      try {
+        const user = requireCrmAccess(authManager);
+        const member = await CrmMember.findOne({ id: memberId });
+        if (!member) {
+          return { content: [{ type: 'text', text: `Member "${memberId}" not found.` }], isError: true };
+        }
+
+        member.sessions = (member.sessions || []).filter(s => s.id !== sessionId);
+        member.sessionCount = member.sessions.length;
+        member.lastSession = member.sessions.reduce((latest, s) => (s.date > latest ? s.date : latest), '');
+        member.updatedAt = Date.now();
+        member.updatedBy = user.username;
+        member.updatedByName = user.name;
+        await member.save();
+
+        return {
+          content: [{
+            type: 'text',
+            text: `Deleted session note (${sessionId}) from "${member.name}". Remaining sessions: ${member.sessionCount}.`
           }]
         };
       } catch (err) {

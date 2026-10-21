@@ -487,7 +487,7 @@ function renderLoginPage({ client_id, redirect_uri, state, code_challenge, code_
       </div>
     </div>
 
-    <p class="desc">Log in with your BookList ID and password to grant ChatGPT access to your lists, tasks, and notes.</p>
+    <p class="desc">Log in with your BookList & MyDeepwork ID and password to grant ChatGPT access to your lists, tasks, notes, and CRM records.</p>
 
     ${error ? `<div class="error">${error}</div>` : ''}
 
@@ -511,7 +511,7 @@ function renderLoginPage({ client_id, redirect_uri, state, code_challenge, code_
       <button type="submit" class="btn">Authorize & Connect</button>
 
       <div class="scope-box">
-        ChatGPT will be granted access to read and update your <strong>lists</strong>, <strong>todos</strong>, and <strong>notes</strong> as your authenticated user.
+        ChatGPT will be granted access to read and update your <strong>lists</strong>, <strong>todos</strong>, <strong>notes</strong>, and <strong>CRM members, renewals, & sessions</strong> as your authenticated user.
       </div>
     </form>
   </div>

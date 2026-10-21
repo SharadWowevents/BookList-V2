@@ -142,7 +142,7 @@ export function setupMcpSseRoutes(app) {
           }
         },
         status: 'active',
-        description: 'Model Context Protocol server for BookList. Log in with your User DB credentials to manage lists, tasks, and notes.'
+        description: 'Model Context Protocol server for BookList & MyDeepwork. Log in with your User DB credentials to manage lists, tasks, notes, and CRM members, renewals, follow-ups, and session history.'
       });
     }
 

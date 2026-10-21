@@ -55,5 +55,60 @@ export function registerMcpPrompts(server) {
       };
     }
   );
+
+  server.prompt(
+    'crm_followup_briefing',
+    'Generate a comprehensive daily CRM briefing: overdue follow-ups, items due today, and memberships expiring soon.',
+    {},
+    () => {
+      return {
+        messages: [{
+          role: 'user',
+          content: {
+            type: 'text',
+            text: 'Please review the CRM using "crm_list_due_followups" and "crm_list_expiring_members". Generate an executive daily briefing with:\n1. Urgent: Overdue follow-ups needing immediate calls or messages\n2. Due today: Scheduled follow-ups for today with context\n3. Expiring soon: Members up for renewal in the next 30 days and suggested outreach strategy.'
+          }
+        }]
+      };
+    }
+  );
+
+  server.prompt(
+    'crm_session_prep',
+    'Prepare an agenda and strategic discussion points for an upcoming member session based on historical notes.',
+    {
+      memberNameOrId: z.string().describe('Name or ID of the CRM member')
+    },
+    ({ memberNameOrId }) => {
+      return {
+        messages: [{
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Please prepare for a session with member "${memberNameOrId}".\n1. Find the member using "crm_get_member" or "crm_list_members".\n2. Review their past session history using "crm_list_sessions".\n3. Outline a 3-part meeting agenda (Review of previous action items, Deep dive discussion topics, Next steps/accountability) based on what has been discussed previously.`
+          }
+        }]
+      };
+    }
+  );
+
+  server.prompt(
+    'crm_renewal_outreach',
+    'Draft a personalized WhatsApp renewal or check-in message for a member approaching their renewal date.',
+    {
+      memberNameOrId: z.string().describe('Name or ID of the CRM member')
+    },
+    ({ memberNameOrId }) => {
+      return {
+        messages: [{
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Please draft a warm, professional, high-touch renewal outreach message for "${memberNameOrId}".\n1. Fetch the member details with "crm_get_member" and check their plan and end date.\n2. Review their session notes with "crm_list_sessions" to reference specific wins or topics they worked on.\n3. Draft a tailored WhatsApp message acknowledging their journey and inviting them to renew or discuss their next phase.`
+          }
+        }]
+      };
+    }
+  );
 }
 
