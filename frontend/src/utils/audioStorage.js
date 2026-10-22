@@ -186,21 +186,13 @@ export async function audioURL(src) {
  * Validate and clean audio metadata
  */
 export function cleanAudio(a) {
-  if (!a || typeof a !== 'object' || typeof a.src !== 'string') return null;
-  const src = a.src.trim();
-  if (
-    !/^\/api\/audio\/[A-Za-z0-9_-]+$/.test(src) &&
-    !/^idb:[a-z0-9]{6,64}$/.test(src) &&
-    !/^\/_blob\/[A-Za-z0-9_-]{8,64}$/.test(src) &&
-    !/^https?:\/\//.test(src) &&
-    !/^data:audio\//.test(src)
-  ) {
-    return null;
-  }
+  if (!a || typeof a !== 'object') return null;
+  const src = typeof a.src === 'string' ? a.src.trim() : '';
+  if (!src) return null;
   return {
     src,
     dur: Math.max(0, Math.min(36000, Math.round(+a.dur || 0))),
-    type: String(a.type || 'audio/webm').slice(0, 40)
+    type: String(a.type || 'audio/webm').slice(0, 50)
   };
 }
 

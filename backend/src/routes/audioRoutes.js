@@ -20,7 +20,8 @@ router.post('/upload', rawParser, async (req, res) => {
 
     // Check if JSON body with base64 was sent
     if (req.body && typeof req.body === 'object' && req.body.data) {
-      const base64Data = req.body.data.replace(/^data:audio\/[a-z0-9.-]+;base64,/, '');
+      const rawData = String(req.body.data);
+      const base64Data = rawData.includes(';base64,') ? rawData.split(';base64,')[1] : rawData;
       buffer = Buffer.from(base64Data, 'base64');
       if (req.body.type) contentType = req.body.type;
       if (req.body.dur) dur = parseFloat(req.body.dur) || 0;

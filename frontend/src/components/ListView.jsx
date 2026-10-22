@@ -58,11 +58,11 @@ export const ListView = () => {
   const [shareMode, setShareMode] = useState(() => activeList?.shared?.mode || 'edit');
   const [shareSid, setShareSid] = useState(() => activeList?.shared?.sid || '');
 
-  const updateListTodos = useCallback((newTodos) => {
+  const updateListTodos = useCallback((newTodos, immediate = false) => {
     if (!activeList || ro) return;
     updateBoard({
       lists: board.lists.map(l => l.id === activeList.id ? { ...l, todos: newTodos } : l)
-    });
+    }, immediate);
     if (shareSid && canEdit) {
       sharesAPI.updateShare(shareSid, { content: { name: activeList.name, todos: newTodos } }).catch(() => {});
     }
@@ -219,17 +219,43 @@ export const ListView = () => {
       if (ev.data && ev.data.size) chunks.push(ev.data);
     };
 
-    mr.onstop = () => {
+    mr.onstop = async () => {
       clearInterval(recordingTimerRef.current);
       stream.getTracks().forEach(t => t.stop());
       setIsRecording(false);
 
       const dur = (Date.now() - recordingStartTimeRef.current) / 1000;
       if (!mr._cancelled && chunks.length && dur >= 0.6) {
-        const blob = new Blob(chunks, { type: (mr.mimeType || mime || 'audio/webm').split(';')[0] });
-        if (pendingAudio?.url) URL.revokeObjectURL(pendingAudio.url);
-        const url = URL.createObjectURL(blob);
-        setPendingAudio({ blob, dur, url });
+        const mimeType = (mr.mimeType || mime || 'audio/webm').split(';')[0];
+        const blob = new Blob(chunks, { type: mimeType });
+
+        // Auto-save and add immediately to the list so it is NEVER lost on refresh!
+        setIsSavingAudio(true);
+        showToast('Saving audio note…', 15000);
+        try {
+          const audioMeta = await storeAudio(blob, dur);
+          const currentList = activeListRef.current;
+          if (currentList) {
+            const currentText = newTodoText.trim();
+            const newTodo = {
+              id: uid(),
+              text: currentText || 'Audio note',
+              done: false,
+              starred: false,
+              audio: audioMeta
+            };
+            updateListTodosRef.current([...(currentList.todos || []), newTodo], true);
+            setNewTodoText('');
+            setIsSavingAudio(false);
+            showToast('Audio note added to list.', 2200);
+          }
+        } catch (err) {
+          setIsSavingAudio(false);
+          console.error('Failed to auto-save audio note:', err);
+          const url = URL.createObjectURL(blob);
+          setPendingAudio({ blob, dur, url });
+          showToast(err?.userMsg || "Couldn't save audio note. Tap + to try again.", 5000);
+        }
       } else if (!mr._cancelled) {
         showToast('That recording was too short. Hold on a little longer.', 2600);
       }
@@ -272,9 +298,32 @@ export const ListView = () => {
     const url = URL.createObjectURL(file);
     const probe = new Audio();
     probe.preload = 'metadata';
-    const done = (d) => {
-      if (pendingAudio?.url) URL.revokeObjectURL(pendingAudio.url);
-      setPendingAudio({ blob: file, dur: isFinite(d) ? d : 0, url });
+    const done = async (d) => {
+      const dur = isFinite(d) ? d : 0;
+      setIsSavingAudio(true);
+      showToast('Saving audio file…', 15000);
+      try {
+        const audioMeta = await storeAudio(file, dur);
+        const currentList = activeListRef.current;
+        if (currentList) {
+          const currentText = newTodoText.trim() || file.name.replace(/\.[^.]+$/, '') || 'Audio note';
+          const newTodo = {
+            id: uid(),
+            text: currentText,
+            done: false,
+            starred: false,
+            audio: audioMeta
+          };
+          updateListTodosRef.current([...(currentList.todos || []), newTodo], true);
+          setNewTodoText('');
+          setIsSavingAudio(false);
+          showToast('Audio note added to list.', 2200);
+        }
+      } catch (err) {
+        setIsSavingAudio(false);
+        setPendingAudio({ blob: file, dur, url });
+        showToast(err?.userMsg || "Couldn't save audio. Tap + to try again.", 5000);
+      }
     };
     probe.onloadedmetadata = () => done(probe.duration);
     probe.onerror = () => done(0);
@@ -421,7 +470,7 @@ export const ListView = () => {
       ...(audioMeta ? { audio: audioMeta } : {})
     };
 
-    updateListTodos([...activeList.todos, newTodo]);
+    updateListTodos([...activeList.todos, newTodo], true);
     setNewTodoText('');
     if (audioMeta) {
       showToast('Todo added with audio note.', 2200);
@@ -522,7 +571,7 @@ export const ListView = () => {
       if (text) {
         const capitalized = text.charAt(0).toUpperCase() + text.slice(1);
         const newTodo = { id: uid(), text: capitalized, done: false, starred: false };
-        updateListTodos([...activeList.todos, newTodo]);
+        updateListTodos([...activeList.todos, newTodo], true);
         setNewTodoText('');
         showToast('Added: ' + capitalized, 2200);
       }

@@ -482,10 +482,25 @@ export const AppProvider = ({ children }) => {
     }
   }, [getNoteKey]);
 
-  // Debounced board sync
+  // Board sync helpers & immediate sync
   const boardSyncTimer = useRef(null);
+  const pendingBoardSyncRef = useRef(null);
 
-  const updateBoard = useCallback((updates) => {
+  const syncBoardToBackendNow = useCallback((boardToSync) => {
+    if (!getToken() || !boardToSync) return;
+    clearTimeout(boardSyncTimer.current);
+    boardSyncTimer.current = null;
+    pendingBoardSyncRef.current = null;
+    boardAPI.syncBoard({
+      lists: boardToSync.lists,
+      notes: boardToSync.notes,
+      activeId: boardToSync.activeId,
+      activeNoteId: boardToSync.activeNoteId,
+      tab: boardToSync.tab
+    }).catch(() => {});
+  }, []);
+
+  const updateBoard = useCallback((updates, immediate = false) => {
     setBoardState(prev => {
       const next = normalizeBoard({ ...prev, ...updates, updatedAt: Date.now() });
       if (session) {
@@ -494,21 +509,41 @@ export const AppProvider = ({ children }) => {
 
         // Sync with MongoDB
         if (getToken()) {
-          clearTimeout(boardSyncTimer.current);
-          boardSyncTimer.current = setTimeout(() => {
-            boardAPI.syncBoard({
-              lists: next.lists,
-              notes: next.notes,
-              activeId: next.activeId,
-              activeNoteId: next.activeNoteId,
-              tab: next.tab
-            }).catch(() => {});
-          }, 500);
+          pendingBoardSyncRef.current = next;
+          if (immediate) {
+            syncBoardToBackendNow(next);
+          } else {
+            clearTimeout(boardSyncTimer.current);
+            boardSyncTimer.current = setTimeout(() => {
+              syncBoardToBackendNow(next);
+            }, 500);
+          }
         }
       }
       return next;
     });
-  }, [session]);
+  }, [session, syncBoardToBackendNow]);
+
+  // Flush any pending board sync immediately before page unloads or hides
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (pendingBoardSyncRef.current) {
+        syncBoardToBackendNow(pendingBoardSyncRef.current);
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.hidden && pendingBoardSyncRef.current) {
+        syncBoardToBackendNow(pendingBoardSyncRef.current);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [syncBoardToBackendNow]);
 
   const ingestShare = useCallback(async (sid, targetSession = session, baseBoard = null) => {
     if (!sid || sid === 'local') return;
