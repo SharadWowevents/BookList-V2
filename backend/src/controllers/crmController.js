@@ -1,4 +1,5 @@
 import { CrmMember } from '../models/CrmMember.js';
+import { recordLog } from '../services/auditLogService.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 const PLANS = ["Boardroom", "QBR", "FT 1", "FT 2", "FT 3", "FT Continuity", "Alumni"];
@@ -85,6 +86,18 @@ export const createMember = async (req, res) => {
     });
 
     await newMember.save();
+
+    await recordLog({
+      action: 'create_member',
+      category: 'crm',
+      actor: req.user,
+      details: `Created CRM member '${newMember.name}' (${newMember.plan})`,
+      targetId: newMember.id,
+      targetType: 'crm_member',
+      newState: newMember.toObject(),
+      canUndo: true
+    });
+
     res.status(201).json({ member: newMember });
   } catch (err) {
     console.error('createMember error:', err);
@@ -100,6 +113,8 @@ export const updateMember = async (req, res) => {
     if (!member) {
       return res.status(404).json({ message: 'Member not found.' });
     }
+
+    const previousState = member.toObject();
 
     const clean = sanitizeMemberInput(req.body, id);
     if (!clean.name) {
@@ -136,6 +151,19 @@ export const updateMember = async (req, res) => {
     member.updatedByName = req.user?.name || '';
 
     await member.save();
+
+    await recordLog({
+      action: 'update_member',
+      category: 'crm',
+      actor: req.user,
+      details: `Updated CRM member '${member.name}'`,
+      targetId: member.id,
+      targetType: 'crm_member',
+      previousState,
+      newState: member.toObject(),
+      canUndo: true
+    });
+
     res.json({ member });
   } catch (err) {
     console.error('updateMember error:', err);
@@ -152,7 +180,20 @@ export const deleteMember = async (req, res) => {
       return res.status(404).json({ message: 'Member not found.' });
     }
 
+    const previousState = member.toObject();
     await CrmMember.deleteOne({ id });
+
+    await recordLog({
+      action: 'delete_member',
+      category: 'crm',
+      actor: req.user,
+      details: `Deleted CRM member '${member.name}' (${member.sessions?.length || 0} sessions)`,
+      targetId: member.id,
+      targetType: 'crm_member',
+      previousState,
+      canUndo: true
+    });
+
     res.json({ message: `Member ${member.name} deleted successfully.` });
   } catch (err) {
     console.error('deleteMember error:', err);
@@ -219,6 +260,18 @@ export const addMemberSession = async (req, res) => {
     member.updatedByName = req.user?.name || '';
 
     await member.save();
+
+    await recordLog({
+      action: 'add_session',
+      category: 'crm',
+      actor: req.user,
+      details: `Added ${newSession.type} note for '${member.name}'`,
+      targetId: member.id,
+      targetType: 'crm_member',
+      newState: { sessionId: newSession.id, session: newSession },
+      canUndo: true
+    });
+
     res.status(201).json({ session: newSession, member });
   } catch (err) {
     console.error('addMemberSession error:', err);
@@ -278,6 +331,8 @@ export const deleteMemberSession = async (req, res) => {
       return res.status(404).json({ message: 'Member not found.' });
     }
 
+    const deletedSession = member.sessions.find(s => s.id === sessionId);
+
     member.sessions = member.sessions.filter(s => s.id !== sessionId);
     member.sessionCount = member.sessions.length;
     member.lastSession = member.sessions.reduce((latest, s) => (s.date > latest ? s.date : latest), '');
@@ -286,10 +341,23 @@ export const deleteMemberSession = async (req, res) => {
     member.updatedByName = req.user?.name || '';
 
     await member.save();
+
+    if (deletedSession) {
+      await recordLog({
+        action: 'delete_session',
+        category: 'crm',
+        actor: req.user,
+        details: `Deleted ${deletedSession.type || 'session'} note for '${member.name}'`,
+        targetId: member.id,
+        targetType: 'crm_member',
+        previousState: { session: deletedSession },
+        canUndo: true
+      });
+    }
+
     res.json({ message: 'Session note deleted.', member });
   } catch (err) {
     console.error('deleteMemberSession error:', err);
     res.status(500).json({ message: 'Error deleting session note.' });
   }
 };
-

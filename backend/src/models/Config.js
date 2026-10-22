@@ -10,10 +10,23 @@ const configSchema = new mongoose.Schema({
   requireLogin: {
     type: Boolean,
     default: false
+  },
+  backupConfig: {
+    autoBackupEnabled: {
+      type: Boolean,
+      default: true
+    },
+    intervalHours: {
+      type: Number,
+      default: 24
+    },
+    lastAutoBackup: {
+      type: Date,
+      default: null
+    }
   }
 }, {
   timestamps: true
 });
 
 export const Config = mongoose.model('Config', configSchema);
-

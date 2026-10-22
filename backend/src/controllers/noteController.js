@@ -1,6 +1,7 @@
 import { Note } from '../models/Note.js';
 import { Share } from '../models/Share.js';
 import { syncShareAcrossAllUsers } from '../utils/shareSync.js';
+import { recordLog } from '../services/auditLogService.js';
 
 export const getNote = async (req, res) => {
   try {
@@ -52,6 +53,17 @@ export const createNote = async (req, res) => {
       order: count
     });
 
+    await recordLog({
+      action: 'create_note',
+      category: 'notes',
+      actor: req.user,
+      details: `Created note '${note.title || 'Untitled note'}'`,
+      targetId: note.id,
+      targetType: 'note',
+      newState: note.toObject(),
+      canUndo: true
+    });
+
     res.status(201).json({
       id: note.id,
       title: note.title,
@@ -72,6 +84,8 @@ export const updateNote = async (req, res) => {
     const { title, html, starred } = req.body;
 
     let note = await Note.findOne({ userId, id });
+    const previousState = note ? note.toObject() : null;
+
     if (!note) {
       // If note body is saved before creation, upsert it
       note = new Note({ userId, id, title: title || '', html: html || '', starred: !!starred });
@@ -82,6 +96,20 @@ export const updateNote = async (req, res) => {
     }
 
     await note.save();
+
+    await recordLog({
+      action: previousState ? 'update_note' : 'create_note',
+      category: 'notes',
+      actor: req.user,
+      details: previousState
+        ? `Updated note '${note.title || 'Untitled note'}'`
+        : `Created note '${note.title || 'Untitled note'}'`,
+      targetId: note.id,
+      targetType: 'note',
+      previousState,
+      newState: note.toObject(),
+      canUndo: true
+    });
 
     // Check if this note is shared and sync across all collaborators
     let shareSid = note.shared?.sid;
@@ -120,8 +148,22 @@ export const deleteNote = async (req, res) => {
     const userId = req.user._id;
     const { id } = req.params;
 
-    const result = await Note.findOneAndDelete({ userId, id });
-    if (!result) return res.status(404).json({ message: 'Note not found.' });
+    const note = await Note.findOne({ userId, id });
+    if (!note) return res.status(404).json({ message: 'Note not found.' });
+
+    const previousState = note.toObject();
+    await Note.deleteOne({ userId, id });
+
+    await recordLog({
+      action: 'delete_note',
+      category: 'notes',
+      actor: req.user,
+      details: `Deleted note '${note.title || 'Untitled note'}'`,
+      targetId: note.id,
+      targetType: 'note',
+      previousState,
+      canUndo: true
+    });
 
     res.json({ message: 'Note deleted successfully.' });
   } catch (err) {
@@ -129,4 +171,3 @@ export const deleteNote = async (req, res) => {
     res.status(500).json({ message: 'Error deleting note.' });
   }
 };
-

@@ -3,6 +3,7 @@ import { Note } from '../models/Note.js';
 import { User } from '../models/User.js';
 import { Share } from '../models/Share.js';
 import { syncShareAcrossAllUsers } from '../utils/shareSync.js';
+import { recordLog } from '../services/auditLogService.js';
 
 export const getBoard = async (req, res) => {
   try {
@@ -107,8 +108,43 @@ export const syncBoard = async (req, res) => {
 
     // Sync lists
     if (Array.isArray(lists)) {
+      const existingLists = await List.find({ userId });
+      const currentIds = lists.map(l => l.id);
+      const existingMap = new Map(existingLists.map(l => [l.id, l]));
+
+      // Log deletions
+      const deletedLists = existingLists.filter(el => !currentIds.includes(el.id));
+      for (const del of deletedLists) {
+        await recordLog({
+          action: 'delete_list',
+          category: 'lists',
+          actor: req.user,
+          details: `Deleted list '${del.name}' (${del.todos?.length || 0} items)`,
+          targetId: del.id,
+          targetType: 'list',
+          previousState: del.toObject(),
+          canUndo: true
+        });
+      }
+
       for (let i = 0; i < lists.length; i++) {
         const item = lists[i];
+        const prev = existingMap.get(item.id);
+
+        if (!prev) {
+          // Log creation
+          await recordLog({
+            action: 'create_list',
+            category: 'lists',
+            actor: req.user,
+            details: `Created list '${item.name || 'Untitled list'}'`,
+            targetId: item.id,
+            targetType: 'list',
+            newState: item,
+            canUndo: true
+          });
+        }
+
         await List.findOneAndUpdate(
           { userId, id: item.id },
           {
@@ -134,14 +170,47 @@ export const syncBoard = async (req, res) => {
         }
       }
       // Remove any list not in incoming list array
-      const currentIds = lists.map(l => l.id);
       await List.deleteMany({ userId, id: { $nin: currentIds } });
     }
 
     // Sync notes order / metadata
     if (Array.isArray(notes)) {
+      const existingNotes = await Note.find({ userId });
+      const currentNoteIds = notes.map(n => n.id);
+      const existingNoteMap = new Map(existingNotes.map(n => [n.id, n]));
+
+      // Log deleted notes
+      const deletedNotes = existingNotes.filter(en => !currentNoteIds.includes(en.id));
+      for (const del of deletedNotes) {
+        await recordLog({
+          action: 'delete_note',
+          category: 'notes',
+          actor: req.user,
+          details: `Deleted note '${del.title || 'Untitled note'}'`,
+          targetId: del.id,
+          targetType: 'note',
+          previousState: del.toObject(),
+          canUndo: true
+        });
+      }
+
       for (let i = 0; i < notes.length; i++) {
         const item = notes[i];
+        const prev = existingNoteMap.get(item.id);
+
+        if (!prev) {
+          await recordLog({
+            action: 'create_note',
+            category: 'notes',
+            actor: req.user,
+            details: `Created note '${item.title || 'Untitled note'}'`,
+            targetId: item.id,
+            targetType: 'note',
+            newState: item,
+            canUndo: true
+          });
+        }
+
         await Note.findOneAndUpdate(
           { userId, id: item.id },
           {
@@ -165,7 +234,6 @@ export const syncBoard = async (req, res) => {
           }).catch(() => {});
         }
       }
-      const currentNoteIds = notes.map(n => n.id);
       await Note.deleteMany({ userId, id: { $nin: currentNoteIds } });
     }
 
@@ -198,6 +266,17 @@ export const createList = async (req, res) => {
       todos
     });
 
+    await recordLog({
+      action: 'create_list',
+      category: 'lists',
+      actor: req.user,
+      details: `Created list '${newList.name}'`,
+      targetId: newList.id,
+      targetType: 'list',
+      newState: newList.toObject(),
+      canUndo: true
+    });
+
     res.status(201).json({
       id: newList.id,
       name: newList.name,
@@ -219,11 +298,25 @@ export const updateList = async (req, res) => {
     const list = await List.findOne({ userId, id });
     if (!list) return res.status(404).json({ message: 'List not found.' });
 
+    const previousState = list.toObject();
+
     if (name !== undefined) list.name = name.trim();
     if (starred !== undefined) list.starred = starred;
     if (Array.isArray(todos)) list.todos = todos;
 
     await list.save();
+
+    await recordLog({
+      action: 'update_list',
+      category: 'lists',
+      actor: req.user,
+      details: `Updated list '${list.name}'`,
+      targetId: list.id,
+      targetType: 'list',
+      previousState,
+      newState: list.toObject(),
+      canUndo: true
+    });
 
     res.json({
       id: list.id,
@@ -242,8 +335,22 @@ export const deleteList = async (req, res) => {
     const userId = req.user._id;
     const { id } = req.params;
 
-    const result = await List.findOneAndDelete({ userId, id });
-    if (!result) return res.status(404).json({ message: 'List not found.' });
+    const list = await List.findOne({ userId, id });
+    if (!list) return res.status(404).json({ message: 'List not found.' });
+
+    const previousState = list.toObject();
+    await List.deleteOne({ userId, id });
+
+    await recordLog({
+      action: 'delete_list',
+      category: 'lists',
+      actor: req.user,
+      details: `Deleted list '${list.name}' (${list.todos?.length || 0} items)`,
+      targetId: list.id,
+      targetType: 'list',
+      previousState,
+      canUndo: true
+    });
 
     res.json({ message: 'List deleted successfully.' });
   } catch (err) {
@@ -251,4 +358,3 @@ export const deleteList = async (req, res) => {
     res.status(500).json({ message: 'Error deleting list.' });
   }
 };
-

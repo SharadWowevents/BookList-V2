@@ -138,6 +138,30 @@ export const adminAPI = {
   }),
   toggleUserCrm: (username) => request('/admin/users/' + encodeURIComponent(username) + '/crm', {
     method: 'PUT'
+  }),
+  getBackups: () => request('/admin/backups'),
+  createBackup: (label) => request('/admin/backups', {
+    method: 'POST',
+    body: JSON.stringify({ label })
+  }),
+  restoreBackup: (id) => request('/admin/backups/' + encodeURIComponent(id) + '/restore', {
+    method: 'POST'
+  }),
+  deleteBackup: (id) => request('/admin/backups/' + encodeURIComponent(id), {
+    method: 'DELETE'
+  }),
+  downloadBackupUrl: (id) => `${API_BASE}/admin/backups/${encodeURIComponent(id)}/download`,
+  getBackupConfig: () => request('/admin/backup-config'),
+  updateBackupConfig: (configData) => request('/admin/backup-config', {
+    method: 'PUT',
+    body: JSON.stringify(configData)
+  }),
+  getLogs: (params) => {
+    const qs = params ? new URLSearchParams(Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== '')).toString() : '';
+    return request('/admin/logs' + (qs ? `?${qs}` : ''));
+  },
+  undoLog: (id) => request('/admin/logs/' + encodeURIComponent(id) + '/undo', {
+    method: 'POST'
   })
 };
 

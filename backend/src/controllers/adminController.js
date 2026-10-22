@@ -4,6 +4,16 @@ import { List } from '../models/List.js';
 import { Note } from '../models/Note.js';
 import { Config } from '../models/Config.js';
 import { Share } from '../models/Share.js';
+import {
+  createBackup,
+  getBackups,
+  getBackupById,
+  restoreBackup,
+  deleteBackup,
+  getBackupConfig,
+  updateBackupConfig
+} from '../services/backupService.js';
+import { recordLog, getLogs, undoLogEntry } from '../services/auditLogService.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -31,6 +41,17 @@ export const updateConfig = async (req, res) => {
       config.requireLogin = !!requireLogin;
     }
     await config.save();
+
+    await recordLog({
+      action: 'update_config',
+      category: 'admin',
+      actor: req.user,
+      details: `${config.requireLogin ? 'Enabled' : 'Disabled'} required sign-in`,
+      targetId: 'app',
+      targetType: 'config',
+      canUndo: false
+    });
+
     res.json({ requireLogin: config.requireLogin });
   } catch (err) {
     console.error('updateConfig error:', err);
@@ -121,6 +142,16 @@ export const createUser = async (req, res) => {
     newUser.activeId = createdLists[0].id;
     await newUser.save();
 
+    await recordLog({
+      action: 'create_user',
+      category: 'admin',
+      actor: req.user,
+      details: `Created user @${newUser.username} (${newUser.name})`,
+      targetId: newUser.username,
+      targetType: 'user',
+      canUndo: true
+    });
+
     res.status(201).json({
       u: newUser.username,
       name: newUser.name,
@@ -144,6 +175,16 @@ export const toggleUserCrm = async (req, res) => {
     user.crm = !user.crm;
     await user.save();
 
+    await recordLog({
+      action: 'toggle_user_crm',
+      category: 'admin',
+      actor: req.user,
+      details: `${user.crm ? 'Granted' : 'Revoked'} CRM access for @${user.username}`,
+      targetId: user.username,
+      targetType: 'user',
+      canUndo: false
+    });
+
     res.json({
       u: user.username,
       name: user.name,
@@ -163,6 +204,16 @@ export const toggleUserStatus = async (req, res) => {
 
     user.status = user.status === 'active' ? 'off' : 'active';
     await user.save();
+
+    await recordLog({
+      action: 'toggle_user_status',
+      category: 'admin',
+      actor: req.user,
+      details: `${user.status === 'active' ? 'Turned on' : 'Turned off'} user @${user.username}`,
+      targetId: user.username,
+      targetType: 'user',
+      canUndo: false
+    });
 
     res.json({
       u: user.username,
@@ -191,6 +242,16 @@ export const resetPassword = async (req, res) => {
     user.passwordHash = await bcrypt.hash(password, salt);
     await user.save();
 
+    await recordLog({
+      action: 'reset_password',
+      category: 'admin',
+      actor: req.user,
+      details: `Reset password for @${user.username}`,
+      targetId: user.username,
+      targetType: 'user',
+      canUndo: false
+    });
+
     res.json({
       message: `Password reset successfully for ${user.name || user.username}.`
     });
@@ -206,11 +267,30 @@ export const deleteUser = async (req, res) => {
     const user = await User.findOne({ username: username.toLowerCase() });
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
+    // Snapshot user data for undo
+    const userLists = await List.find({ userId: user._id }).lean();
+    const userNotes = await Note.find({ userId: user._id }).lean();
+
     // Clean up user's data
     await List.deleteMany({ userId: user._id });
     await Note.deleteMany({ userId: user._id });
     await Share.deleteMany({ ownerId: user._id });
     await User.deleteOne({ _id: user._id });
+
+    await recordLog({
+      action: 'delete_user',
+      category: 'admin',
+      actor: req.user,
+      details: `Deleted user @${user.username} (${user.name}) and their data`,
+      targetId: user.username,
+      targetType: 'user',
+      previousState: {
+        user: user.toObject(),
+        lists: userLists,
+        notes: userNotes
+      },
+      canUndo: true
+    });
 
     res.json({ message: `User ${user.name || username} deleted.` });
   } catch (err) {
@@ -233,10 +313,11 @@ export const renameUser = async (req, res) => {
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
     const trimmedName = name.trim();
+    const oldName = user.name;
+    const oldUsername = user.username;
     user.name = trimmedName;
 
     let usernameChanged = false;
-    let oldUsername = user.username;
 
     if (newUsername && newUsername.trim()) {
       const targetUser = newUsername.trim().toLowerCase();
@@ -260,6 +341,18 @@ export const renameUser = async (req, res) => {
     // Keep public and shared ownerName in sync
     await Share.updateMany({ ownerId: user._id }, { ownerName: trimmedName });
 
+    await recordLog({
+      action: 'rename_user',
+      category: 'admin',
+      actor: req.user,
+      details: `Renamed user '${oldName}' to '${trimmedName}'${usernameChanged ? ` (@${user.username})` : ''}`,
+      targetId: user.username,
+      targetType: 'user',
+      previousState: { name: oldName, username: oldUsername },
+      newState: { name: trimmedName, username: user.username },
+      canUndo: false
+    });
+
     res.json({
       message: 'User renamed successfully.',
       user: {
@@ -281,4 +374,117 @@ export const renameUser = async (req, res) => {
   }
 };
 
+/* ============================================================
+   BACKUP & LOG CONTROLLERS
+   ============================================================ */
 
+export const getBackupsController = async (req, res) => {
+  try {
+    const backups = await getBackups();
+    res.json({ backups });
+  } catch (err) {
+    console.error('getBackups error:', err);
+    res.status(500).json({ message: 'Error retrieving backups.' });
+  }
+};
+
+export const createManualBackupController = async (req, res) => {
+  try {
+    const { label } = req.body;
+    const backup = await createBackup({
+      type: 'manual',
+      createdBy: req.user?.username || 'admin',
+      createdByName: req.user?.name || 'Admin',
+      label: label || ''
+    });
+    res.status(201).json({ backup, message: 'Backup created successfully.' });
+  } catch (err) {
+    console.error('createManualBackup error:', err);
+    res.status(500).json({ message: 'Error creating manual backup.' });
+  }
+};
+
+export const restoreBackupController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await restoreBackup(id, req.user);
+    res.json(result);
+  } catch (err) {
+    console.error('restoreBackup error:', err);
+    res.status(err.status || 500).json({ message: err.message || 'Error restoring backup.' });
+  }
+};
+
+export const deleteBackupController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await deleteBackup(id, req.user);
+    res.json(result);
+  } catch (err) {
+    console.error('deleteBackup error:', err);
+    res.status(err.status || 500).json({ message: err.message || 'Error deleting backup.' });
+  }
+};
+
+export const downloadBackupController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const backup = await getBackupById(id);
+    if (!backup) {
+      return res.status(404).json({ message: 'Backup not found.' });
+    }
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${backup.id}.json"`);
+    res.send(JSON.stringify(backup.data, null, 2));
+  } catch (err) {
+    console.error('downloadBackup error:', err);
+    res.status(500).json({ message: 'Error downloading backup.' });
+  }
+};
+
+export const getBackupConfigController = async (req, res) => {
+  try {
+    const config = await getBackupConfig();
+    res.json(config);
+  } catch (err) {
+    console.error('getBackupConfig error:', err);
+    res.status(500).json({ message: 'Error retrieving backup settings.' });
+  }
+};
+
+export const updateBackupConfigController = async (req, res) => {
+  try {
+    const { autoBackupEnabled, intervalHours } = req.body;
+    const updated = await updateBackupConfig({ autoBackupEnabled, intervalHours }, req.user);
+    res.json(updated);
+  } catch (err) {
+    console.error('updateBackupConfig error:', err);
+    res.status(500).json({ message: 'Error updating backup settings.' });
+  }
+};
+
+export const getLogsController = async (req, res) => {
+  try {
+    const { category, search, limit } = req.query;
+    const logs = await getLogs({
+      category,
+      search,
+      limit: limit ? parseInt(limit, 10) : 200
+    });
+    res.json({ logs });
+  } catch (err) {
+    console.error('getLogs error:', err);
+    res.status(500).json({ message: 'Error retrieving activity logs.' });
+  }
+};
+
+export const undoLogController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await undoLogEntry(id, req.user);
+    res.json({ success: true, message: 'Action undone successfully.', log: result });
+  } catch (err) {
+    console.error('undoLog error:', err);
+    res.status(err.status || 500).json({ message: err.message || 'Error performing undo.' });
+  }
+};

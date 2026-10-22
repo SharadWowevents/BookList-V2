@@ -12,6 +12,7 @@ import crmRoutes from './routes/crmRoutes.js';
 import audioRoutes from './routes/audioRoutes.js';
 import { setupMcpSseRoutes } from './mcp/sseHandler.js';
 import { setupOAuthRoutes } from './mcp/oauth.js';
+import { startAutoBackupScheduler } from './services/backupService.js';
 
 dotenv.config();
 
@@ -21,6 +22,9 @@ const PORT = process.env.PORT || 5016;
 
 // Connect to MongoDB
 connectDB();
+
+// Start Background Auto-Backup Scheduler (Max 5 Backups)
+startAutoBackupScheduler();
 
 // Middleware
 app.use(cors({

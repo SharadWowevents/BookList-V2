@@ -6,6 +6,8 @@ import { User } from '../models/User.js';
 import { Share } from '../models/Share.js';
 import { CrmMember } from '../models/CrmMember.js';
 import { syncShareAcrossAllUsers } from '../utils/shareSync.js';
+import { getBackups, createBackup, getBackupConfig } from '../services/backupService.js';
+import { getLogs, undoLogEntry } from '../services/auditLogService.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -1444,6 +1446,113 @@ export function registerMcpTools(server, authManager) {
       }
 
       return { content: [{ type: 'text', text: `Unknown action "${action}".` }], isError: true };
+    }
+  );
+
+  /* ---------------- BACKUP & AUDIT LOG TOOLS ---------------- */
+
+  server.tool(
+    'get_backups',
+    'List all available database snapshots (max 5 capacity) and current auto-backup schedule config.',
+    {},
+    async () => {
+      const user = authManager.requireAuth();
+      if (user.role !== 'admin') {
+        return { content: [{ type: 'text', text: 'Admin privileges required to view backups.' }], isError: true };
+      }
+
+      const backups = await getBackups();
+      const config = await getBackupConfig();
+
+      const summary = {
+        config,
+        totalBackups: backups.length,
+        capacity: 5,
+        backups: backups.map(b => ({
+          id: b.id,
+          type: b.type,
+          label: b.label,
+          sizeKb: (b.size / 1024).toFixed(1),
+          counts: b.counts,
+          createdAt: b.createdAt
+        }))
+      };
+
+      return { content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'create_backup',
+    'Create an immediate full workspace backup (lists, notes, CRM records, users). Maximum 5 backups stored; oldest is pruned if limit reached.',
+    {
+      label: z.string().optional().describe('Optional descriptive label for the backup')
+    },
+    async ({ label = '' }) => {
+      const user = authManager.requireAuth();
+      if (user.role !== 'admin') {
+        return { content: [{ type: 'text', text: 'Admin privileges required to create backups.' }], isError: true };
+      }
+
+      const bkp = await createBackup({
+        type: 'manual',
+        createdBy: user.username,
+        createdByName: user.name,
+        label
+      });
+
+      return { content: [{ type: 'text', text: `Successfully created backup "${bkp.label}" (${bkp.id}, ${(bkp.size / 1024).toFixed(1)} KB, Lists: ${bkp.counts.lists}, Notes: ${bkp.counts.notes}, CRM: ${bkp.counts.crmMembers}).` }] };
+    }
+  );
+
+  server.tool(
+    'get_activity_logs',
+    'Retrieve recent activity audit logs (max 200 capacity) with optional category and search filters.',
+    {
+      category: z.enum(['all', 'lists', 'notes', 'crm', 'backup', 'admin']).optional().describe('Filter by category'),
+      search: z.string().optional().describe('Search keyword in actor or details'),
+      limit: z.number().optional().describe('Max logs to return (default 50, max 200)')
+    },
+    async ({ category = 'all', search = '', limit = 50 }) => {
+      const user = authManager.requireAuth();
+      if (user.role !== 'admin') {
+        return { content: [{ type: 'text', text: 'Admin privileges required to view activity logs.' }], isError: true };
+      }
+
+      const logs = await getLogs({ category, search, limit });
+      const formatted = logs.map(l => ({
+        id: l.id,
+        category: l.category,
+        action: l.action,
+        actor: l.actorName || l.actorUsername,
+        details: l.details,
+        canUndo: l.canUndo,
+        isUndone: l.isUndone,
+        createdAt: l.createdAt
+      }));
+
+      return { content: [{ type: 'text', text: JSON.stringify({ count: formatted.length, maxCapacity: 200, logs: formatted }, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'undo_activity_log',
+    'Undo a past action from the activity logs by its log ID (e.g. restore a deleted list/note/member or remove a created item).',
+    {
+      logId: z.string().describe('The log ID to undo (e.g. log_...)')
+    },
+    async ({ logId }) => {
+      const user = authManager.requireAuth();
+      if (user.role !== 'admin') {
+        return { content: [{ type: 'text', text: 'Admin privileges required to undo actions.' }], isError: true };
+      }
+
+      try {
+        const result = await undoLogEntry(logId, user);
+        return { content: [{ type: 'text', text: `Successfully reverted action: "${result.details}".` }] };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Failed to undo: ${err.message}` }], isError: true };
+      }
     }
   );
 }
