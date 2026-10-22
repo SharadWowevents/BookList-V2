@@ -93,3 +93,4 @@ export async function pruneAuditLogs(limit = MAX_AUDIT_LOGS) {
 }
 
 export const AuditLog = mongoose.model('AuditLog', auditLogSchema);
+

@@ -298,3 +298,4 @@ export const undoLogEntry = async (logId, adminUser) => {
     throw err;
   }
 };
+

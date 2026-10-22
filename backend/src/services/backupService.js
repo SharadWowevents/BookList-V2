@@ -354,3 +354,4 @@ export const startAutoBackupScheduler = () => {
   setTimeout(checkAndRunAutoBackup, 15 * 1000);
   console.log('[AutoBackup] Scheduler active (checks every 3 minutes, max capacity 5 backups).');
 };
+
