@@ -4,9 +4,17 @@ import { useApp } from '../context/AppContext';
 import { uid, reorderSubset } from '../utils/constants';
 import { sharesAPI, boardAPI } from '../services/api';
 import {
+  IDB,
+  fmtDur,
+  pickMime,
+  storeAudio,
+  audioURL,
+  cleanAudio
+} from '../utils/audioStorage';
+import {
   BackIcon, ShareIcon, TrashIcon, CheckIcon, StarIcon, XIcon,
   MicIcon, PlusIcon, ChevronRightIcon, ChevronDownIcon, CopyIcon,
-  PencilIcon, EyeIcon
+  PencilIcon, EyeIcon, WaveIcon, AudioPlayIcon, AudioPauseIcon, StopIcon
 } from './Icons';
 
 export const ListView = () => {
@@ -18,6 +26,27 @@ export const ListView = () => {
   const [voiceHint, setVoiceHint] = useState('');
   const [draggedTodoId, setDraggedTodoId] = useState(null);
   const recognitionRef = useRef(null);
+
+  // Audio Recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [pendingAudio, setPendingAudio] = useState(null); // { blob, dur, url }
+  const [isSavingAudio, setIsSavingAudio] = useState(false);
+  const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+
+  const mediaRecorderRef = useRef(null);
+  const streamRef = useRef(null);
+  const chunksRef = useRef([]);
+  const recordingStartTimeRef = useRef(0);
+  const recordingTimerRef = useRef(null);
+  const audioInputRef = useRef(null);
+  const previewAudioRef = useRef(new Audio());
+
+  // Audio Player state for items in the list
+  const [playingTodoId, setPlayingTodoId] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackCurrentTime, setPlaybackCurrentTime] = useState(0);
+  const playerRef = useRef(new Audio());
 
   const activeList = board.lists.find(l => l.id === board.activeId) || board.lists[0];
 
@@ -56,6 +85,202 @@ export const ListView = () => {
     updateListTodosRef.current = updateListTodos;
   }, [updateListTodos]);
 
+  // Audio player listeners
+  useEffect(() => {
+    const player = playerRef.current;
+    player.preload = 'auto';
+
+    const onTimeUpdate = () => {
+      setPlaybackCurrentTime(player.currentTime || 0);
+    };
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    const onEnded = () => {
+      player.currentTime = 0;
+      setPlayingTodoId(null);
+      setIsPlaying(false);
+      setPlaybackCurrentTime(0);
+    };
+    const onError = () => {
+      setPlayingTodoId(null);
+      setIsPlaying(false);
+      setPlaybackCurrentTime(0);
+    };
+
+    player.addEventListener('timeupdate', onTimeUpdate);
+    player.addEventListener('play', onPlay);
+    player.addEventListener('pause', onPause);
+    player.addEventListener('ended', onEnded);
+    player.addEventListener('error', onError);
+
+    return () => {
+      player.pause();
+      player.removeEventListener('timeupdate', onTimeUpdate);
+      player.removeEventListener('play', onPlay);
+      player.removeEventListener('pause', onPause);
+      player.removeEventListener('ended', onEnded);
+      player.removeEventListener('error', onError);
+    };
+  }, []);
+
+  // When changing lists or unmounting, pause audio
+  useEffect(() => {
+    playerRef.current?.pause();
+    setPlayingTodoId(null);
+    setIsPlaying(false);
+    setPlaybackCurrentTime(0);
+  }, [activeList?.id]);
+
+  // Toggle play audio note
+  const togglePlayAudio = async (todo) => {
+    if (!todo?.audio?.src) return;
+    const player = playerRef.current;
+
+    if (playingTodoId === todo.id) {
+      if (player.paused) {
+        player.play().catch(() => {});
+      } else {
+        player.pause();
+      }
+      return;
+    }
+
+    try {
+      player.pause();
+      const playableSrc = await audioURL(todo.audio.src);
+      player.src = playableSrc;
+      setPlayingTodoId(todo.id);
+      await player.play();
+    } catch (err) {
+      console.error('Audio play error:', err);
+      setPlayingTodoId(null);
+      setIsPlaying(false);
+      showToast(err && err.message === 'missing'
+        ? "This audio note is saved on another device, so it can't play here."
+        : "Couldn't play this audio note.");
+    }
+  };
+
+  // Toggle preview of pending recording
+  const togglePlayPreview = () => {
+    if (!pendingAudio?.url) return;
+    const preview = previewAudioRef.current;
+    if (!preview.paused) {
+      preview.pause();
+      setIsPlayingPreview(false);
+      return;
+    }
+    preview.src = pendingAudio.url;
+    preview.play().catch(() => showToast("Couldn't play recording."));
+    setIsPlayingPreview(true);
+    preview.onpause = () => setIsPlayingPreview(false);
+    preview.onended = () => setIsPlayingPreview(false);
+  };
+
+  // Start recording
+  const startRecording = async () => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      showToast("This browser can't record here. Choose an audio file instead.", 3500);
+      audioInputRef.current?.click();
+      return;
+    }
+
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true }
+      });
+    } catch (err) {
+      const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+      showToast(denied
+        ? 'Microphone access is blocked. Allow the microphone for this site in your browser settings, or choose an audio file.'
+        : 'No microphone found. Choose an audio file instead.', 5500);
+      if (!denied) audioInputRef.current?.click();
+      return;
+    }
+
+    const mime = pickMime();
+    let mr;
+    try {
+      mr = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 64000 } : undefined);
+    } catch {
+      stream.getTracks().forEach(t => t.stop());
+      showToast("Couldn't start recording in this browser.");
+      return;
+    }
+
+    const chunks = [];
+    chunksRef.current = chunks;
+    mediaRecorderRef.current = mr;
+    streamRef.current = stream;
+    recordingStartTimeRef.current = Date.now();
+
+    mr.ondataavailable = (ev) => {
+      if (ev.data && ev.data.size) chunks.push(ev.data);
+    };
+
+    mr.onstop = () => {
+      clearInterval(recordingTimerRef.current);
+      stream.getTracks().forEach(t => t.stop());
+      setIsRecording(false);
+
+      const dur = (Date.now() - recordingStartTimeRef.current) / 1000;
+      if (!mr._cancelled && chunks.length && dur >= 0.6) {
+        const blob = new Blob(chunks, { type: (mr.mimeType || mime || 'audio/webm').split(';')[0] });
+        if (pendingAudio?.url) URL.revokeObjectURL(pendingAudio.url);
+        const url = URL.createObjectURL(blob);
+        setPendingAudio({ blob, dur, url });
+      } else if (!mr._cancelled) {
+        showToast('That recording was too short. Hold on a little longer.', 2600);
+      }
+    };
+
+    mr.start(1000);
+    setIsRecording(true);
+    setRecordingDuration(0);
+
+    recordingTimerRef.current = setInterval(() => {
+      const elapsed = (Date.now() - recordingStartTimeRef.current) / 1000;
+      setRecordingDuration(elapsed);
+      if (elapsed > 15 * 60) {
+        showToast('Audio notes stop at 15 minutes.');
+        stopRecording(false);
+      }
+    }, 250);
+  };
+
+  // Stop or Cancel recording
+  const stopRecording = (cancel = false) => {
+    const mr = mediaRecorderRef.current;
+    if (!mr) return;
+    mr._cancelled = !!cancel;
+    try {
+      if (mr.state !== 'inactive') mr.stop();
+      else mr.onstop && mr.onstop();
+    } catch {
+      mr.onstop && mr.onstop();
+    }
+  };
+
+  // Attach audio file
+  const attachAudioFile = (file) => {
+    if (!file) return;
+    if (!/^audio\/|^video\/(mp4|webm|quicktime)/.test(file.type) && !/\.(m4a|mp3|wav|aac|ogg|webm|opus|caf)$/i.test(file.name)) {
+      showToast('Choose an audio file, like a voice memo.');
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const probe = new Audio();
+    probe.preload = 'metadata';
+    const done = (d) => {
+      if (pendingAudio?.url) URL.revokeObjectURL(pendingAudio.url);
+      setPendingAudio({ blob: file, dur: isFinite(d) ? d : 0, url });
+    };
+    probe.onloadedmetadata = () => done(probe.duration);
+    probe.onerror = () => done(0);
+    probe.src = url;
+  };
+
   useEffect(() => {
     todoSortablesRef.current.forEach(s => s.destroy());
     todoSortablesRef.current = [];
@@ -67,7 +292,7 @@ export const ListView = () => {
       delay: 180,
       delayOnTouchOnly: true,
       touchStartThreshold: 6,
-      filter: ".todo-edit, .check, .star-btn, .del",
+      filter: ".todo-edit, .check, .star-btn, .del, .todo-audio",
       preventOnFilter: false,
       ghostClass: "sortable-ghost",
       chosenClass: "sortable-chosen",
@@ -165,14 +390,42 @@ export const ListView = () => {
     }
   };
 
-  const handleAddTodo = (e) => {
+  const handleAddTodo = async (e) => {
     if (e) e.preventDefault();
     if (ro) return;
     const text = newTodoText.trim();
-    if (!text) return;
-    const newTodo = { id: uid(), text, done: false, starred: false };
+    if (!text && !pendingAudio) return;
+
+    let audioMeta = null;
+    if (pendingAudio) {
+      if (isSavingAudio) return;
+      setIsSavingAudio(true);
+      showToast('Saving audio note…', 20000);
+      try {
+        audioMeta = await storeAudio(pendingAudio.blob, pendingAudio.dur);
+      } catch (err) {
+        setIsSavingAudio(false);
+        showToast(err?.userMsg || "Couldn't save audio note. Try again.", 5000);
+        return;
+      }
+      setIsSavingAudio(false);
+      if (pendingAudio.url) URL.revokeObjectURL(pendingAudio.url);
+      setPendingAudio(null);
+    }
+
+    const newTodo = {
+      id: uid(),
+      text: text || (audioMeta ? 'Audio note' : 'New task'),
+      done: false,
+      starred: false,
+      ...(audioMeta ? { audio: audioMeta } : {})
+    };
+
     updateListTodos([...activeList.todos, newTodo]);
     setNewTodoText('');
+    if (audioMeta) {
+      showToast('Todo added with audio note.', 2200);
+    }
   };
 
   const toggleCheck = (todoId) => {
@@ -221,7 +474,7 @@ export const ListView = () => {
     setEditingTodoId(null);
   };
 
-  // Voice recognition
+  // Voice recognition (Speech to text)
   const toggleVoice = () => {
     if (voiceListening && recognitionRef.current) {
       recognitionRef.current.stop();
@@ -426,6 +679,9 @@ export const ListView = () => {
 
   const renderTodoRow = (t) => {
     const isEditing = editingTodoId === t.id && !ro;
+    const isThisPlaying = playingTodoId === t.id && isPlaying;
+    const hasAudio = t.audio && cleanAudio(t.audio);
+
     return (
       <div
         key={t.id}
@@ -442,27 +698,54 @@ export const ListView = () => {
           <span className="box">{t.done && <CheckIcon />}</span>
         </button>
 
-        {isEditing ? (
-          <input
-            className="todo-edit"
-            autoFocus
-            value={editingText}
-            onChange={(e) => setEditingText(e.target.value)}
-            onBlur={() => saveEdit(t.id)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') saveEdit(t.id);
-              if (e.key === 'Escape') setEditingTodoId(null);
-            }}
-          />
-        ) : (
-          <span
-            className="todo-text"
-            onClick={() => !ro && startEditing(t)}
-            title={ro ? undefined : 'Click to edit'}
-          >
-            {t.text}
-          </span>
-        )}
+        <div className="todo-main">
+          {isEditing ? (
+            <input
+              className="todo-edit"
+              autoFocus
+              value={editingText}
+              onChange={(e) => setEditingText(e.target.value)}
+              onBlur={() => saveEdit(t.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveEdit(t.id);
+                if (e.key === 'Escape') setEditingTodoId(null);
+              }}
+            />
+          ) : (
+            <span
+              className="todo-text"
+              onClick={() => !ro && startEditing(t)}
+              title={ro ? undefined : 'Click to edit'}
+            >
+              {t.text}
+            </span>
+          )}
+
+          {hasAudio && (
+            <button
+              type="button"
+              className={`todo-audio ${isThisPlaying ? 'on' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlayAudio(t);
+              }}
+              aria-label={`${isThisPlaying ? 'Pause' : 'Play'} audio note`}
+            >
+              <span className="ta-ic">
+                {isThisPlaying ? <AudioPauseIcon /> : <AudioPlayIcon />}
+              </span>
+              <span className="ta-wave" aria-hidden="true">
+                <i></i><i></i><i></i><i></i><i></i>
+              </span>
+              <span className="ta-time">
+                {isThisPlaying && playbackCurrentTime > 0
+                  ? `${fmtDur(playbackCurrentTime)} / `
+                  : ''}
+                {fmtDur(t.audio.dur)}
+              </span>
+            </button>
+          )}
+        </div>
 
         {ro ? (
           t.starred ? (
@@ -705,13 +988,70 @@ export const ListView = () => {
           <EyeIcon />
           <span>View only. {activeList.shared?.ownerName || 'The owner'} can make changes.</span>
         </div>
+      ) : isRecording ? (
+        <div className="composer rec">
+          <div className="rec-bar">
+            <span className="rec-dot" aria-hidden="true"></span>
+            <span className="rec-time" id="recTime">{fmtDur(recordingDuration)}</span>
+            <span className="rec-label">Recording audio note…</span>
+            <button
+              type="button"
+              className="pill plain"
+              id="recCancel"
+              onClick={() => stopRecording(true)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="send rec-stop"
+              id="recStop"
+              aria-label="Stop recording"
+              onClick={() => stopRecording(false)}
+            >
+              <StopIcon />
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="composer">
+          {pendingAudio && (
+            <div className="audio-pending">
+              <button
+                type="button"
+                className="ap-play"
+                id="apPlay"
+                onClick={togglePlayPreview}
+                aria-label={isPlayingPreview ? "Pause recording" : "Play recording"}
+              >
+                {isPlayingPreview ? <AudioPauseIcon /> : <AudioPlayIcon />}
+              </button>
+              <span className="ap-text">
+                <WaveIcon size={18} />
+                <b>Audio note</b> · {fmtDur(pendingAudio.dur)}
+              </span>
+              <span className="ap-hint">Add text (optional), then tap +</span>
+              <button
+                type="button"
+                className="icon-btn"
+                id="apRemove"
+                onClick={() => {
+                  if (pendingAudio.url) URL.revokeObjectURL(pendingAudio.url);
+                  previewAudioRef.current?.pause();
+                  setIsPlayingPreview(false);
+                  setPendingAudio(null);
+                }}
+                aria-label="Remove audio note"
+              >
+                <XIcon />
+              </button>
+            </div>
+          )}
           <form onSubmit={handleAddTodo} autoComplete="off">
             <input
               className="input"
               id="newTodo"
-              placeholder="Add todo"
+              placeholder={pendingAudio ? "Add a title for this audio note" : "Add todo"}
               maxLength={300}
               aria-label="Add todo"
               value={newTodoText}
@@ -721,15 +1061,38 @@ export const ListView = () => {
               type="button"
               className={`mic ${voiceListening ? 'live' : ''}`}
               id="mic"
-              aria-label="Add todo by voice"
+              aria-label="Type by voice"
+              title="Type by voice"
               onClick={toggleVoice}
             >
               <MicIcon />
             </button>
+            <button
+              type="button"
+              className="mic rec-btn"
+              id="recBtn"
+              aria-label="Record an audio note"
+              title="Record an audio note"
+              onClick={startRecording}
+            >
+              <WaveIcon />
+            </button>
             <button type="submit" className="send" aria-label="Add">
-              <PlusIcon />
+              {isSavingAudio ? '…' : <PlusIcon />}
             </button>
           </form>
+          <input
+            type="file"
+            ref={audioInputRef}
+            accept="audio/*,video/mp4,video/webm"
+            capture="microphone"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files && e.target.files[0];
+              e.target.value = '';
+              if (f) attachAudioFile(f);
+            }}
+          />
           {voiceHint && <div className="hint">{voiceHint}</div>}
         </div>
       )}

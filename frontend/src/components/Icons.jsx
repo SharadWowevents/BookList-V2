@@ -334,16 +334,29 @@ export const KeyIcon = ({ size = 20, className = '' }) => (
   </svg>
 );
 
-export const PauseIcon = ({ size = 20, className = '' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/>
-  </svg>
+export const PauseIcon = ({ size = 20, className = '', solid = false }) => (
+  solid ? (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <rect x="6" y="4.5" width="4" height="15" rx="1"/>
+      <rect x="14" y="4.5" width="4" height="15" rx="1"/>
+    </svg>
+  ) : (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/>
+    </svg>
+  )
 );
 
-export const PlayIcon = ({ size = 20, className = '' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <circle cx="12" cy="12" r="9"/><path d="M10 8.5l5.5 3.5-5.5 3.5z"/>
-  </svg>
+export const PlayIcon = ({ size = 20, className = '', solid = false }) => (
+  solid ? (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <path d="M7 4.5v15l12.5-7.5z"/>
+    </svg>
+  ) : (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="12" cy="12" r="9"/><path d="M10 8.5l5.5 3.5-5.5 3.5z"/>
+    </svg>
+  )
 );
 
 export const RefreshIcon = ({ size = 20, className = '' }) => (
@@ -413,5 +426,36 @@ export const SearchIcon = ({ size = 18, className = '' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <circle cx="11" cy="11" r="6.5"/>
     <path d="M20 20l-4.2-4.2"/>
+  </svg>
+);
+
+export const WaveIcon = ({ size = 22, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/>
+  </svg>
+);
+
+export const AudioPlayIcon = ({ size = 14, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path d="M7 4.5v15l12.5-7.5z"/>
+  </svg>
+);
+
+export const AudioPauseIcon = ({ size = 14, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <rect x="6" y="4.5" width="4" height="15" rx="1"/>
+    <rect x="14" y="4.5" width="4" height="15" rx="1"/>
+  </svg>
+);
+
+export const StopIcon = ({ size = 20, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <rect x="6" y="6" width="12" height="12" rx="2.5"/>
+  </svg>
+);
+
+export const PaperclipIcon = ({ size = 18, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M20 11.5l-7.8 7.8a5 5 0 01-7.1-7.1l8.5-8.5a3.3 3.3 0 014.7 4.7l-8.5 8.5a1.7 1.7 0 01-2.4-2.4l7.8-7.8"/>
   </svg>
 );

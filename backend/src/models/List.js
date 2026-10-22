@@ -17,6 +17,10 @@ const todoSchema = new mongoose.Schema({
   starred: {
     type: Boolean,
     default: false
+  },
+  audio: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
   }
 }, { _id: false });
 
