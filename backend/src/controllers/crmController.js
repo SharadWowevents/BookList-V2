@@ -5,13 +5,35 @@ const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(
 const PLANS = ["Boardroom", "QBR", "FT 1", "FT 2", "FT 3", "FT Continuity", "Alumni"];
 const SESSION_TYPES = ["Session", "MoM", "Review", "Call"];
 
+export function normLinkedIn(v) {
+  v = String(v || '').slice(0, 300).trim();
+  if (!v) return "";
+  if (!/^https?:\/\//i.test(v)) v = "https://" + v.replace(/^\/+/, "");
+  try {
+    const u = new URL(v);
+    if (!/(^|\.)linkedin\.com$/i.test(u.hostname) || u.username || u.password) return "";
+    u.protocol = "https:";
+    u.hash = "";
+    return u.href;
+  } catch {
+    return "";
+  }
+}
+
 // Helper to sanitize member payload
 const sanitizeMemberInput = (d, defaultId = null) => {
   d = d || {};
+  const emailRaw = String(d.email || d.emailRaw || '').trim().slice(0, 120);
+  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw) ? emailRaw : '';
+  const linkedinRaw = String(d.linkedin || d.linkedinRaw || '').trim().slice(0, 300);
+  const validLinkedIn = normLinkedIn(linkedinRaw);
+
   return {
     id: (d.id || defaultId || uid()).toString().slice(0, 60),
     name: (d.name || '').trim().slice(0, 80),
     mobile: (d.mobile || '').trim().slice(0, 20),
+    email: validEmail,
+    linkedin: validLinkedIn,
     plan: PLANS.includes(d.plan) ? d.plan : PLANS[0],
     start: /^\d{4}-\d{2}-\d{2}$/.test(d.start) ? d.start : '',
     end: /^\d{4}-\d{2}-\d{2}$/.test(d.end) ? d.end : '',
@@ -67,6 +89,16 @@ export const createMember = async (req, res) => {
     const digits = clean.mobile.replace(/\D/g, '');
     if (clean.mobile && (digits.length < 7 || digits.length > 15)) {
       return res.status(400).json({ message: "Enter a valid mobile number, for example 98100 12345." });
+    }
+
+    const rawEmail = String(req.body.email || req.body.emailRaw || '').trim();
+    if (rawEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+      return res.status(400).json({ message: "Enter a valid email ID, like name@company.com." });
+    }
+
+    const rawLinkedIn = String(req.body.linkedin || req.body.linkedinRaw || '').trim();
+    if (rawLinkedIn && !normLinkedIn(rawLinkedIn)) {
+      return res.status(400).json({ message: "Enter a LinkedIn profile link, like linkedin.com/in/rohan-mehta." });
     }
 
     if (clean.start && clean.end && clean.end < clean.start) {
@@ -126,12 +158,24 @@ export const updateMember = async (req, res) => {
       return res.status(400).json({ message: "Enter a valid mobile number, for example 98100 12345." });
     }
 
+    const rawEmail = String(req.body.email || req.body.emailRaw || '').trim();
+    if (rawEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+      return res.status(400).json({ message: "Enter a valid email ID, like name@company.com." });
+    }
+
+    const rawLinkedIn = String(req.body.linkedin || req.body.linkedinRaw || '').trim();
+    if (rawLinkedIn && !normLinkedIn(rawLinkedIn)) {
+      return res.status(400).json({ message: "Enter a LinkedIn profile link, like linkedin.com/in/rohan-mehta." });
+    }
+
     if (clean.start && clean.end && clean.end < clean.start) {
       return res.status(400).json({ message: "The end date is before the start date." });
     }
 
     member.name = clean.name;
     member.mobile = clean.mobile;
+    member.email = clean.email;
+    member.linkedin = clean.linkedin;
     member.plan = clean.plan;
     member.start = clean.start;
     member.end = clean.end;

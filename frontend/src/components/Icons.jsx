@@ -476,3 +476,12 @@ export const HistoryIcon = ({ size = 20, className = '' }) => (
   </svg>
 );
 
+export const ProfileIcon = ({ size = 18, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="3" y="3" width="18" height="18" rx="4.5"/>
+    <circle cx="12" cy="10" r="3"/>
+    <path d="M7 18a5 5 0 0110 0"/>
+  </svg>
+);
+
+

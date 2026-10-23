@@ -489,9 +489,17 @@ svg{display:block}
 .mcard-id{flex:1;min-width:0}
 .mname{font-weight:700;font-size:1.12rem;line-height:1.25;overflow-wrap:anywhere}
 .mmob{color:var(--muted);font-size:.9rem;font-variant-numeric:tabular-nums}
+.m-links{display:flex;align-items:center;gap:2px;flex:none}
 .wa{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:#1DA851;flex:none;text-decoration:none}
 .wa:hover{background:var(--soft)}
 .wa.sm{display:inline-grid;width:28px;height:28px;vertical-align:middle}
+.li{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:#0A66C2;flex:none;text-decoration:none}
+.li:hover{background:var(--soft)}
+.li.sm{display:inline-grid;width:28px;height:28px;vertical-align:middle}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .li{color:#70B5F9}}
+:root[data-theme="dark"] .li{color:#70B5F9}
+.field-link{text-transform:none;letter-spacing:0;font-weight:600;color:var(--accent);margin-left:8px;font-size:.85rem;text-decoration:none}
+.field-link:hover{text-decoration:underline}
 .mrows{display:flex;flex-direction:column;gap:7px;padding-left:56px;font-size:.95rem}
 .mrow{color:var(--muted)}
 .mrow b{color:var(--ink);font-weight:600}
@@ -665,9 +673,17 @@ body.modal-open{overflow:hidden}
 .mcard-id{flex:1;min-width:0}
 .mname{font-weight:700;font-size:1.12rem;line-height:1.25;overflow-wrap:anywhere}
 .mmob{color:var(--muted);font-size:.9rem;font-variant-numeric:tabular-nums}
+.m-links{display:flex;align-items:center;gap:2px;flex:none}
 .wa{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:#1DA851;flex:none;text-decoration:none}
 .wa:hover{background:var(--soft)}
 .wa.sm{display:inline-grid;width:28px;height:28px;vertical-align:middle}
+.li{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:#0A66C2;flex:none;text-decoration:none}
+.li:hover{background:var(--soft)}
+.li.sm{display:inline-grid;width:28px;height:28px;vertical-align:middle}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .li{color:#70B5F9}}
+:root[data-theme="dark"] .li{color:#70B5F9}
+.field-link{text-transform:none;letter-spacing:0;font-weight:600;color:var(--accent);margin-left:8px;font-size:.85rem;text-decoration:none}
+.field-link:hover{text-decoration:underline}
 .mrows{display:flex;flex-direction:column;gap:7px;padding-left:56px;font-size:.95rem}
 .mrow{color:var(--muted)}
 .mrow b{color:var(--ink);font-weight:600}

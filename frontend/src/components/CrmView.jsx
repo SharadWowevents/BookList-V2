@@ -20,7 +20,8 @@ import {
   XIcon,
   ChatIcon,
   CalendarIcon,
-  NotesIcon
+  NotesIcon,
+  ProfileIcon
 } from './Icons';
 
 export const CrmView = () => {
@@ -67,7 +68,8 @@ export const CrmView = () => {
         if (!q) return true;
         const nameMatch = (m.name || '').toLowerCase().includes(q);
         const mobileMatch = qd && (m.mobile || '').replace(/\D/g, '').includes(qd);
-        return nameMatch || mobileMatch;
+        const emailMatch = m.email && m.email.toLowerCase().includes(q);
+        return nameMatch || mobileMatch || emailMatch;
       })
       .sort((a, b) => (a.end || '9999').localeCompare(b.end || '9999') || (a.name || '').localeCompare(b.name || ''));
   }, [crmMembers, crmFilter, crmSearch]);
@@ -153,19 +155,34 @@ export const CrmView = () => {
             <div className="mname">{m.name || 'Unnamed'}</div>
             {m.mobile && <div className="mmob">{m.mobile}</div>}
           </div>
-          {wa && (
-            <a
-              className="wa"
-              href={wa}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={`WhatsApp ${m.name || ''}`}
-              aria-label={`WhatsApp ${m.name || ''}`}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <ChatIcon />
-            </a>
-          )}
+          <span className="m-links">
+            {wa && (
+              <a
+                className="wa"
+                href={wa}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`WhatsApp ${m.name || ''}`}
+                aria-label={`WhatsApp ${m.name || ''}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ChatIcon />
+              </a>
+            )}
+            {m.linkedin && (
+              <a
+                className="li"
+                href={m.linkedin}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Open ${m.name || ''}'s LinkedIn profile`}
+                aria-label={`LinkedIn profile of ${m.name || ''}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ProfileIcon size={18} />
+              </a>
+            )}
+          </span>
         </div>
         <div className="mrows">
           <div className="mrow">
@@ -234,7 +251,7 @@ export const CrmView = () => {
           <SearchIcon size={18} />
           <input
             id="crmSearch"
-            placeholder="Search name or mobile"
+            placeholder="Search name, mobile or email"
             value={crmSearch}
             onChange={(e) => setCrmSearch(e.target.value)}
             aria-label="Search members"
@@ -373,6 +390,19 @@ export const CrmView = () => {
                           onClick={(e) => e.stopPropagation()}
                         >
                           <ChatIcon size={14} />
+                        </a>
+                      )}
+                      {m.linkedin && (
+                        <a
+                          className="li sm"
+                          href={m.linkedin}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`Open ${m.name || ''}'s LinkedIn profile`}
+                          aria-label={`LinkedIn profile of ${m.name || ''}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ProfileIcon size={14} />
                         </a>
                       )}
                     </span>

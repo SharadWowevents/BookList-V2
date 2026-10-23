@@ -6,6 +6,7 @@ import { User } from '../models/User.js';
 import { Share } from '../models/Share.js';
 import { CrmMember } from '../models/CrmMember.js';
 import { syncShareAcrossAllUsers } from '../utils/shareSync.js';
+import { normLinkedIn } from '../controllers/crmController.js';
 import { getBackups, createBackup, getBackupConfig } from '../services/backupService.js';
 import { getLogs, undoLogEntry } from '../services/auditLogService.js';
 
@@ -131,6 +132,9 @@ export function registerMcpTools(server, authManager) {
     }
     if (!member) {
       member = await CrmMember.findOne({ mobile: mStr });
+    }
+    if (!member && mStr.includes('@')) {
+      member = await CrmMember.findOne({ email: new RegExp('^' + escapeRegex(mStr) + '$', 'i') });
     }
     if (!member) {
       member = await CrmMember.findOne({ name: new RegExp(escapeRegex(mStr), 'i') });
@@ -324,6 +328,7 @@ export function registerMcpTools(server, authManager) {
           $or: [
             { name: new RegExp(escapeRegex(q), 'i') },
             { mobile: new RegExp(escapeRegex(q), 'i') },
+            { email: new RegExp(escapeRegex(q), 'i') },
             { comment: new RegExp(escapeRegex(q), 'i') }
           ]
         });
@@ -331,6 +336,8 @@ export function registerMcpTools(server, authManager) {
           id: m.id,
           name: m.name,
           mobile: m.mobile,
+          email: m.email || '',
+          linkedin: m.linkedin || '',
           plan: m.plan,
           status: computeMemberStatus(m)
         }));
@@ -986,12 +993,14 @@ export function registerMcpTools(server, authManager) {
       filter: z.enum(['all', 'active', 'expiring', 'expired', 'alumni']).optional().describe('Status filter when action is "list"'),
       name: z.string().optional().describe('Member full name (for create or update)'),
       mobile: z.string().optional().describe('Mobile / WhatsApp number (e.g. 98100 12345)'),
+      email: z.string().optional().describe('Email address (e.g. name@company.com)'),
+      linkedin: z.string().optional().describe('LinkedIn profile URL (e.g. linkedin.com/in/name)'),
       plan: z.string().optional().describe('Plan name: "Boardroom", "QBR", "FT 1", "FT 2", "FT 3", "FT Continuity", "Alumni"'),
       start: z.string().optional().describe('Start date YYYY-MM-DD'),
       end: z.string().optional().describe('End date YYYY-MM-DD'),
       comment: z.string().optional().describe('Member notes / comments')
     },
-    async ({ action, identifier, filter = 'all', name, mobile, plan, start, end, comment }) => {
+    async ({ action, identifier, filter = 'all', name, mobile, email, linkedin, plan, start, end, comment }) => {
       const user = authManager.requireAuth();
       requireCrm(user);
 
@@ -1001,6 +1010,8 @@ export function registerMcpTools(server, authManager) {
           id: m.id,
           name: m.name,
           mobile: m.mobile,
+          email: m.email || '',
+          linkedin: m.linkedin || '',
           plan: m.plan,
           start: m.start,
           end: m.end,
@@ -1025,10 +1036,15 @@ export function registerMcpTools(server, authManager) {
         const validPlans = ["Boardroom", "QBR", "FT 1", "FT 2", "FT 3", "FT Continuity", "Alumni"];
         const selectedPlan = validPlans.includes(plan) ? plan : "Boardroom";
 
+        const validEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ? email.trim() : '';
+        const validLinkedIn = linkedin ? normLinkedIn(linkedin) : '';
+
         const newMember = await CrmMember.create({
           id: memberId,
           name: name.trim(),
           mobile: (mobile || '').trim(),
+          email: validEmail,
+          linkedin: validLinkedIn,
           plan: selectedPlan,
           start: start || '',
           end: end || '',
@@ -1074,6 +1090,20 @@ export function registerMcpTools(server, authManager) {
       if (action === 'update') {
         if (name !== undefined) member.name = name.trim();
         if (mobile !== undefined) member.mobile = mobile.trim();
+        if (email !== undefined) {
+          const trimmedEmail = email.trim();
+          if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+            return { content: [{ type: 'text', text: 'Enter a valid email ID, like name@company.com.' }], isError: true };
+          }
+          member.email = trimmedEmail;
+        }
+        if (linkedin !== undefined) {
+          const trimmedLi = linkedin.trim();
+          if (trimmedLi && !normLinkedIn(trimmedLi)) {
+            return { content: [{ type: 'text', text: 'Enter a valid LinkedIn profile link, like linkedin.com/in/name.' }], isError: true };
+          }
+          member.linkedin = normLinkedIn(trimmedLi);
+        }
         if (plan !== undefined) member.plan = plan;
         if (start !== undefined) member.start = start;
         if (end !== undefined) member.end = end;

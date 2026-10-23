@@ -228,6 +228,8 @@ export const AppProvider = ({ children }) => {
           id: uid(),
           name: '',
           mobile: '',
+          email: '',
+          linkedin: '',
           plan: initialPlan,
           start: ymd(today0()),
           end: '',

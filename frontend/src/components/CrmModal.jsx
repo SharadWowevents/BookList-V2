@@ -12,7 +12,8 @@ import {
   dayName,
   fmtDow,
   squareImage,
-  initials
+  initials,
+  normLinkedIn
 } from '../utils/constants';
 import {
   XIcon,
@@ -199,6 +200,18 @@ export const CrmModal = () => {
       return;
     }
 
+    const rawEmail = (draft.email || '').trim();
+    if (rawEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+      setError('Enter a valid email ID, like name@company.com.');
+      return;
+    }
+
+    const rawLinkedIn = (draft.linkedin || '').trim();
+    if (rawLinkedIn && !normLinkedIn(rawLinkedIn)) {
+      setError('Enter a LinkedIn profile link, like linkedin.com/in/rohan-mehta.');
+      return;
+    }
+
     if (draft.start && draft.end && draft.end < draft.start) {
       setError('The end date is before the start date.');
       return;
@@ -223,6 +236,8 @@ export const CrmModal = () => {
 
     const payload = {
       ...draft,
+      email: rawEmail,
+      linkedin: rawLinkedIn ? (normLinkedIn(rawLinkedIn) || rawLinkedIn) : '',
       followUps: nextFollowUps
     };
 
@@ -443,6 +458,47 @@ export const CrmModal = () => {
                     inputMode="tel"
                     placeholder="e.g. 98100 12345"
                     required
+                  />
+                </div>
+                <div className="field full">
+                  <label htmlFor="mEmail">Email ID</label>
+                  <input
+                    className="input"
+                    id="mEmail"
+                    type="email"
+                    value={draft.email ?? ''}
+                    onChange={(e) => setDraft({ ...draft, email: e.target.value })}
+                    maxLength={120}
+                    inputMode="email"
+                    autoCapitalize="none"
+                    spellCheck="false"
+                    placeholder="name@company.com"
+                  />
+                </div>
+                <div className="field full">
+                  <label htmlFor="mLinked">
+                    LinkedIn profile{' '}
+                    {draft.linkedin ? (
+                      <a
+                        className="field-link"
+                        href={normLinkedIn(draft.linkedin) || draft.linkedin}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Open profile ↗
+                      </a>
+                    ) : null}
+                  </label>
+                  <input
+                    className="input"
+                    id="mLinked"
+                    value={draft.linkedin || ''}
+                    onChange={(e) => setDraft({ ...draft, linkedin: e.target.value })}
+                    maxLength={300}
+                    inputMode="url"
+                    autoCapitalize="none"
+                    spellCheck="false"
+                    placeholder="linkedin.com/in/member-name"
                   />
                 </div>
                 <div className="field full">

@@ -103,6 +103,21 @@ export const waLink = mobile => {
   return d.length >= 11 ? `https://wa.me/${d}` : "";
 };
 
+export function normLinkedIn(v) {
+  v = String(v || '').slice(0, 300).trim();
+  if (!v) return "";
+  if (!/^https?:\/\//i.test(v)) v = "https://" + v.replace(/^\/+/, "");
+  try {
+    const u = new URL(v);
+    if (!/(^|\.)linkedin\.com$/i.test(u.hostname) || u.username || u.password) return "";
+    u.protocol = "https:";
+    u.hash = "";
+    return u.href;
+  } catch {
+    return "";
+  }
+}
+
 export const initials = n =>
   (n || "?").trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join("") || "?";
 
