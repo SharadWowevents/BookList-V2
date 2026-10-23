@@ -50,24 +50,30 @@ export const recordLog = async ({
 
 export const getLogs = async ({ limit = 200, category = null, search = '' } = {}) => {
   try {
-    const filter = {};
+    const andClauses = [];
     if (category && category !== 'all') {
-      filter.category = category;
+      andClauses.push({ category });
     }
     if (search && search.trim()) {
-      const reg = new RegExp(search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      filter.$or = [
-        { details: reg },
-        { actorUsername: reg },
-        { actorName: reg },
-        { action: reg },
-        { targetId: reg }
-      ];
+      const escaped = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const reg = new RegExp(escaped, 'i');
+      andClauses.push({
+        $or: [
+          { details: reg },
+          { actorUsername: reg },
+          { actorName: reg },
+          { action: reg },
+          { targetId: reg },
+          { targetType: reg }
+        ]
+      });
     }
+
+    const filter = andClauses.length > 0 ? { $and: andClauses } : {};
 
     const logs = await AuditLog.find(filter)
       .sort({ createdAt: -1 })
-      .limit(Math.min(limit, 200));
+      .limit(Math.min(Number(limit) || 200, 200));
 
     return logs;
   } catch (err) {

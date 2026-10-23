@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { adminAPI } from '../services/api';
 import {
@@ -110,7 +110,7 @@ export const AdminPanel = () => {
       adminAPI.getUsers().catch(() => ({ users: [] })),
       adminAPI.getBackups().catch(() => ({ backups: [] })),
       adminAPI.getBackupConfig().catch(() => ({ autoBackupEnabled: true, intervalHours: 24 })),
-      adminAPI.getLogs({ limit: 50 }).catch(() => ({ logs: [] }))
+      adminAPI.getLogs({ limit: 200 }).catch(() => ({ logs: [] }))
     ]).then(([cfg, usersRes, bkpRes, bkpCfg, logsRes]) => {
       if (!ignore) {
         setRequireLogin(!!cfg?.requireLogin);
@@ -158,14 +158,10 @@ export const AdminPanel = () => {
     }
   };
 
-  const loadLogs = async (cat = logCategory, search = logSearch) => {
+  const loadLogs = async () => {
     setLogsLoading(true);
     try {
-      const res = await adminAPI.getLogs({
-        category: cat === 'all' ? undefined : cat,
-        search: search ? search.trim() : undefined,
-        limit: 200
-      });
+      const res = await adminAPI.getLogs({ limit: 200 });
       setLogs(res?.logs || []);
     } catch {
       showToast('Could not load activity logs.');
@@ -389,6 +385,30 @@ export const AdminPanel = () => {
     u.u.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (u.name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const filteredLogs = useMemo(() => {
+    const q = (logSearch || '').trim().toLowerCase();
+    return logs.filter(log => {
+      if (logCategory !== 'all' && log.category !== logCategory) return false;
+      if (!q) return true;
+      const details = (log.details || '').toLowerCase();
+      const actorName = (log.actorName || '').toLowerCase();
+      const actorUsername = (log.actorUsername || '').toLowerCase();
+      const action = (log.action || '').toLowerCase();
+      const targetId = (log.targetId || '').toLowerCase();
+      const targetType = (log.targetType || '').toLowerCase();
+      const category = (log.category || '').toLowerCase();
+      return (
+        details.includes(q) ||
+        actorName.includes(q) ||
+        actorUsername.includes(q) ||
+        action.includes(q) ||
+        targetId.includes(q) ||
+        targetType.includes(q) ||
+        category.includes(q)
+      );
+    });
+  }, [logs, logCategory, logSearch]);
 
   const credsText = creds
     ? `MyDeepwork sign-in\nLink: ${window.location.origin}\nUsername: ${creds.u}\nPassword: ${creds.pw}`
@@ -1059,7 +1079,11 @@ export const AdminPanel = () => {
             <section className="card">
               <div className="people-head">
                 <div>
-                  <div className="card-title">Activity Logs ({logs.length} of 200)</div>
+                  <div className="card-title">
+                    {logSearch.trim() || logCategory !== 'all'
+                      ? `Activity Logs (${filteredLogs.length} of ${logs.length})`
+                      : `Activity Logs (${logs.length} of 200)`}
+                  </div>
                   <p className="card-note">
                     Strict capacity of 200 logs. Oldest logs are automatically deleted as new actions occur. Admins can click Undo to revert any supported step.
                   </p>
@@ -1091,41 +1115,78 @@ export const AdminPanel = () => {
                       key={cat.id}
                       type="button"
                       className={`log-chip ${logCategory === cat.id ? 'active' : ''}`}
-                      onClick={() => {
-                        setLogCategory(cat.id);
-                        loadLogs(cat.id, logSearch);
-                      }}
+                      onClick={() => setLogCategory(cat.id)}
                     >
                       {cat.label}
                     </button>
                   ))}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
                   <input
                     className="input search"
                     placeholder="Search logs…"
                     value={logSearch}
-                    onChange={(e) => {
-                      setLogSearch(e.target.value);
-                      loadLogs(logCategory, e.target.value);
-                    }}
-                    style={{ fontSize: '0.9rem', padding: '6px 12px', minWidth: 160 }}
+                    onChange={(e) => setLogSearch(e.target.value)}
+                    style={{ fontSize: '0.9rem', padding: '6px 28px 6px 12px', minWidth: 160 }}
                   />
+                  {logSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setLogSearch('')}
+                      style={{
+                        position: 'absolute',
+                        right: 8,
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--muted)',
+                        cursor: 'pointer',
+                        fontSize: '1.1rem',
+                        lineHeight: 1,
+                        padding: '0 4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      title="Clear search"
+                      aria-label="Clear search"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Logs List */}
               {logsLoading ? (
                 <p className="card-note">Loading activity trail…</p>
-              ) : !logs.length ? (
+              ) : !filteredLogs.length ? (
                 <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--muted)' }}>
                   <HistoryIcon size={36} style={{ opacity: 0.4, margin: '0 auto 8px' }} />
-                  <p style={{ margin: 0, fontWeight: 500 }}>No activity recorded matching criteria.</p>
+                  <p style={{ margin: 0, fontWeight: 500 }}>
+                    {logSearch.trim()
+                      ? `No activity recorded matching "${logSearch}".`
+                      : logCategory !== 'all'
+                        ? `No activity recorded in "${logCategory}" category.`
+                        : 'No activity recorded yet.'}
+                  </p>
+                  {(logSearch || logCategory !== 'all') && (
+                    <button
+                      type="button"
+                      className="pill plain"
+                      style={{ marginTop: 12, fontSize: '0.82rem' }}
+                      onClick={() => {
+                        setLogSearch('');
+                        setLogCategory('all');
+                      }}
+                    >
+                      Clear filters
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  {logs.map(log => {
+                  {filteredLogs.map(log => {
                     const isUndoing = undoingId === log.id;
                     const isConfirming = confirmUndoId === log.id;
                     const catClass = log.category || 'lists';
