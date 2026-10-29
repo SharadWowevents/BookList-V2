@@ -29,3 +29,4 @@ router.post('/photo', rawParser, uploadPhoto);
 router.delete('/photo/:id', deletePhoto);
 
 export default router;
+

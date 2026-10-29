@@ -209,3 +209,4 @@ export const deletePhoto = async (req, res) => {
     res.status(500).json({ message: 'Error deleting photo.' });
   }
 };
+

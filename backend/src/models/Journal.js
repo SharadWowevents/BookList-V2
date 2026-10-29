@@ -77,3 +77,4 @@ const journalPhotoSchema = new mongoose.Schema({
 
 export const JournalYear = mongoose.model('JournalYear', journalYearSchema);
 export const JournalPhoto = mongoose.model('JournalPhoto', journalPhotoSchema);
+
