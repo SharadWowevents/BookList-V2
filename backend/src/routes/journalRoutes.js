@@ -1,5 +1,5 @@
 import express from 'express';
-import { authMiddleware } from '../middleware/auth.js';
+import { protect } from '../middleware/auth.js';
 import {
   getYears,
   getYear,
@@ -20,7 +20,7 @@ const rawParser = express.raw({
 router.get('/photo/:id', getPhoto);
 
 // Protected routes
-router.use(authMiddleware);
+router.use(protect);
 
 router.get('/years', getYears);
 router.get('/:year', getYear);

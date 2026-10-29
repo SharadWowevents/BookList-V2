@@ -63,3 +63,5 @@ export const crmOnly = (req, res, next) => {
     res.status(403).json({ message: 'CRM access required. Contact your admin.' });
   }
 };
+
+export const authMiddleware = protect;
