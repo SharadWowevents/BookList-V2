@@ -193,3 +193,22 @@ export const crmAPI = {
   })
 };
 
+export const journalAPI = {
+  getYears: (years = []) => {
+    const q = years.length ? `?years=${years.join(',')}` : '';
+    return request(`/journal/years${q}`);
+  },
+  getYear: (year) => request(`/journal/${year}`),
+  patchEntry: (year, dateKey, entryData) => request(`/journal/${year}/${dateKey}`, {
+    method: 'PUT',
+    body: JSON.stringify(entryData)
+  }),
+  uploadPhoto: (dataUrlOrBase64, name = 'photo.jpg') => request('/journal/photo', {
+    method: 'POST',
+    body: JSON.stringify({ data: dataUrlOrBase64, name, type: 'image/jpeg' })
+  }),
+  deletePhoto: (id) => request(`/journal/photo/${id}`, {
+    method: 'DELETE'
+  })
+};
+

@@ -5,6 +5,7 @@ import { ListView } from './components/ListView';
 import { NoteView } from './components/NoteView';
 import { CrmView } from './components/CrmView';
 import { CrmModal } from './components/CrmModal';
+import { JournalView } from './components/JournalView';
 import { AdminPanel } from './components/AdminPanel';
 import { Login } from './components/Login';
 import { PublicNoteView } from './components/PublicNoteView';
@@ -61,6 +62,8 @@ const Shell = () => {
           <AdminPanel />
         ) : board.tab === 'crm' ? (
           <CrmView />
+        ) : board.tab === 'journal' ? (
+          <JournalView />
         ) : board.tab === 'lists' ? (
           <ListView key={board.activeId} />
         ) : (

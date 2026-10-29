@@ -10,6 +10,7 @@ import shareRoutes from './routes/shareRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import crmRoutes from './routes/crmRoutes.js';
 import audioRoutes from './routes/audioRoutes.js';
+import journalRoutes from './routes/journalRoutes.js';
 import { setupMcpSseRoutes } from './mcp/sseHandler.js';
 import { setupOAuthRoutes } from './mcp/oauth.js';
 import { startAutoBackupScheduler } from './services/backupService.js';
@@ -53,6 +54,7 @@ app.use('/api/shares', shareRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/crm', crmRoutes);
 app.use('/api/audio', audioRoutes);
+app.use('/api/journal', journalRoutes);
 
 // Model Context Protocol (MCP) & OAuth Routes
 setupOAuthRoutes(app);

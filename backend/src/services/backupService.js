@@ -4,6 +4,7 @@ import { List } from '../models/List.js';
 import { Note } from '../models/Note.js';
 import { CrmMember } from '../models/CrmMember.js';
 import { User } from '../models/User.js';
+import { JournalYear } from '../models/Journal.js';
 import { recordLog } from './auditLogService.js';
 
 let autoBackupTimer = null;
@@ -19,6 +20,7 @@ export const createBackup = async ({
     const notes = await Note.find({}).lean();
     const crmMembers = await CrmMember.find({}).lean();
     const users = await User.find({}).lean();
+    const journalYears = await JournalYear.find({}).lean();
     const config = await Config.findOne({ key: 'app' }).lean();
 
     const backupPayload = {
@@ -30,6 +32,7 @@ export const createBackup = async ({
         notes,
         crmMembers,
         users,
+        journalYears,
         config
       }
     };
@@ -55,7 +58,8 @@ export const createBackup = async ({
         lists: lists.length,
         notes: notes.length,
         crmMembers: crmMembers.length,
-        users: users.length
+        users: users.length,
+        journals: journalYears.length
       },
       size,
       data: backupPayload
@@ -179,12 +183,25 @@ export const restoreBackup = async (id, adminUser) => {
       }
     }
 
+    // Restore Journal entries
+    if (Array.isArray(payload.journalYears)) {
+      await JournalYear.deleteMany({});
+      if (payload.journalYears.length > 0) {
+        const cleanJournals = payload.journalYears.map(j => {
+          const doc = { ...j };
+          delete doc._id;
+          return doc;
+        });
+        await JournalYear.insertMany(cleanJournals);
+      }
+    }
+
     // Log the restore event (can be undone to previousState!)
     await recordLog({
       action: 'restore_backup',
       category: 'backup',
       actor: adminUser,
-      details: `Restored backup '${backup.label || backup.id}' (${payload.lists?.length || 0} lists, ${payload.notes?.length || 0} notes, ${payload.crmMembers?.length || 0} CRM members)`,
+      details: `Restored backup '${backup.label || backup.id}' (${payload.lists?.length || 0} lists, ${payload.notes?.length || 0} notes, ${payload.crmMembers?.length || 0} CRM members, ${payload.journalYears?.length || 0} journal years)`,
       targetId: backup.id,
       targetType: 'backup',
       previousState,

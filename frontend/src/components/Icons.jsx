@@ -484,4 +484,20 @@ export const ProfileIcon = ({ size = 18, className = '' }) => (
   </svg>
 );
 
+export const JournalIcon = ({ size = 22, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M5 4.5A1.5 1.5 0 016.5 3H19v16H6.5A1.5 1.5 0 005 20.5z"/>
+    <path d="M5 20.5A1.5 1.5 0 006.5 22H19v-3M9 7.5h6M9 11h4"/>
+  </svg>
+);
+
+export const SmileIcon = ({ size = 20, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <circle cx="12" cy="12" r="9"/>
+    <path d="M8.5 14.5a4.5 4.5 0 007 0"/>
+    <circle cx="9" cy="10" r=".9" fill="currentColor"/>
+    <circle cx="15" cy="10" r=".9" fill="currentColor"/>
+  </svg>
+);
+
 

@@ -1,6 +1,37 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { ACCENTS, starterBoard, PLANS, ymd, today0, uid } from '../utils/constants';
-import { authAPI, boardAPI, notesAPI, sharesAPI, crmAPI, setToken, getToken } from '../services/api';
+import { authAPI, boardAPI, notesAPI, sharesAPI, crmAPI, journalAPI, setToken, getToken } from '../services/api';
+
+const shrinkImage = (file, maxSide = 1400, quality = 0.82) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read image file'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.onload = () => {
+        let { width: w, height: h } = img;
+        if (w > maxSide || h > maxSide) {
+          if (w > h) {
+            h = Math.round((h * maxSide) / w);
+            w = maxSide;
+          } else {
+            w = Math.round((w * maxSide) / h);
+            h = maxSide;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+};
 
 const normalizeBoard = (b) => {
   if (!b) return { lists: [], notes: [], tab: 'lists', activeId: null, activeNoteId: null, updatedAt: Date.now() };
@@ -13,6 +44,8 @@ const normalizeBoard = (b) => {
     res.tab = 'notes';
   } else if (res.tab === 'crm') {
     res.tab = 'crm';
+  } else if (res.tab === 'journal') {
+    res.tab = 'journal';
   } else {
     res.tab = 'lists';
   }
@@ -323,6 +356,115 @@ export const AppProvider = ({ children }) => {
       setCrmLoaded(false);
     }
   }, [isCrmAllowed, loadCrmMembers]);
+
+  // ----------------------------------------------------
+  // JOURNAL STATE & ACTIONS
+  // ----------------------------------------------------
+  const [journalYears, setJournalYears] = useState({});
+  const [journalViewMode, setJournalViewModeState] = useState(() => {
+    try { return localStorage.getItem('listbook:jView') || 'range'; } catch { return 'range'; }
+  });
+  const setJournalViewMode = (v) => {
+    setJournalViewModeState(v);
+    try { localStorage.setItem('listbook:jView', v); } catch {}
+  };
+  const [journalCenter, setJournalCenter] = useState(null);
+  const [journalMonth, setJournalMonth] = useState(null);
+  const [journalStatus, setJournalStatus] = useState('');
+  const journalTimersRef = useRef({});
+
+  const loadJournalYears = useCallback(async (yearsToLoad = []) => {
+    if (!getToken()) return;
+    const missing = yearsToLoad.filter(y => !journalYears[y]?.loaded);
+    if (!missing.length) return;
+
+    try {
+      const res = await journalAPI.getYears(missing);
+      if (res && res.years) {
+        setJournalYears(prev => {
+          const next = { ...prev };
+          for (const [y, data] of Object.entries(res.years)) {
+            next[y] = {
+              year: Number(y),
+              loaded: true,
+              entries: data.entries || {}
+            };
+          }
+          missing.forEach(y => {
+            if (!next[y]) {
+              next[y] = { year: y, loaded: true, entries: {} };
+            }
+          });
+          return next;
+        });
+      }
+    } catch (err) {
+      console.error('loadJournalYears error:', err);
+    }
+  }, [journalYears]);
+
+  const patchJournalEntry = useCallback((year, dateKey, patch) => {
+    setJournalYears(prev => {
+      const curYearObj = prev[year] || { loaded: true, entries: {} };
+      const curEntry = curYearObj.entries[dateKey] || { t: '', img: '', mood: '' };
+      const updatedEntry = { ...curEntry, ...patch };
+      return {
+        ...prev,
+        [year]: {
+          ...curYearObj,
+          entries: {
+            ...curYearObj.entries,
+            [dateKey]: updatedEntry
+          }
+        }
+      };
+    });
+
+    setJournalStatus('Saving…');
+    const timerKey = `${year}_${dateKey}`;
+    clearTimeout(journalTimersRef.current[timerKey]);
+    journalTimersRef.current[timerKey] = setTimeout(async () => {
+      try {
+        await journalAPI.patchEntry(year, dateKey, patch);
+        setJournalStatus('Saved');
+        setTimeout(() => setJournalStatus(''), 2500);
+      } catch (err) {
+        console.error('patchJournalEntry error:', err);
+        setJournalStatus('Not saved');
+        showToast("Couldn't save your journal entry. Check connection.");
+      }
+    }, 600);
+  }, [showToast]);
+
+  const uploadJournalPhoto = useCallback(async (year, dateKey, file) => {
+    setJournalStatus('Saving photo…');
+    try {
+      const dataUrl = await shrinkImage(file, 1400, 0.82);
+      const res = await journalAPI.uploadPhoto(dataUrl, `photo_${year}_${dateKey}.jpg`);
+      if (res && res.src) {
+        patchJournalEntry(year, dateKey, { img: res.src });
+        setJournalStatus('Saved');
+        return res.src;
+      }
+    } catch (err) {
+      console.error('uploadJournalPhoto error:', err);
+      setJournalStatus('');
+      throw err;
+    }
+  }, [patchJournalEntry]);
+
+  const removeJournalPhoto = useCallback(async (year, dateKey, photoSrc) => {
+    patchJournalEntry(year, dateKey, { img: '' });
+    showToast('Photo removed.');
+    if (photoSrc && photoSrc.includes('/photo/')) {
+      const id = photoSrc.split('/photo/')[1];
+      if (id) {
+        try {
+          await journalAPI.deletePhoto(id);
+        } catch {}
+      }
+    }
+  }, [patchJournalEntry, showToast]);
 
   const triggerUndo = useCallback(() => {
     if (toast.undoFn) {
@@ -1073,7 +1215,20 @@ export const AppProvider = ({ children }) => {
       openCrmModal,
       closeCrmModal,
       saveCrmSession,
-      deleteCrmSession
+      deleteCrmSession,
+      journalYears,
+      loadJournalYears,
+      patchJournalEntry,
+      uploadJournalPhoto,
+      removeJournalPhoto,
+      journalViewMode,
+      setJournalViewMode,
+      journalCenter,
+      setJournalCenter,
+      journalMonth,
+      setJournalMonth,
+      journalStatus,
+      setJournalStatus
     }}>
       {children}
     </AppContext.Provider>

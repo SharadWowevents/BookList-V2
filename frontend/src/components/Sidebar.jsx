@@ -5,8 +5,9 @@ import { ACCENTS, uid, reorderSubset, PLANS, crmMatches } from '../utils/constan
 import {
   PlusIcon, StarIcon, GripIcon, PanelIcon, ListPlusIcon, NotePlusIcon,
   ListsIcon, NotesIcon, GearIcon, SunIcon, MoonIcon, MonitorIcon,
-  LogoutIcon, ShieldIcon, CameraIcon, EyeIcon, UsersIcon, CrmIcon
+  LogoutIcon, ShieldIcon, CameraIcon, EyeIcon, UsersIcon, CrmIcon, JournalIcon
 } from './Icons';
+import { mmdd, today0, jHas, moodName } from './JournalView';
 
 export const Sidebar = () => {
   const {
@@ -14,7 +15,8 @@ export const Sidebar = () => {
     accent, setAccent, theme, setTheme,
     collapsed, setCollapsed, photo, savePhoto, removePhoto,
     showToast,
-    crmMembers, crmFilter, setCrmFilter, isCrmAllowed
+    crmMembers, crmFilter, setCrmFilter, isCrmAllowed,
+    journalYears, journalViewMode, setJournalViewMode, setJournalCenter, setJournalMonth
   } = useApp();
 
   const isAdmin = session?.role === 'admin';
@@ -384,6 +386,96 @@ export const Sidebar = () => {
     );
   };
 
+  const renderJournalSide = () => {
+    const t = today0();
+    const curYear = t.getFullYear();
+    const curYearEntries = journalYears[curYear]?.entries || {};
+    const prefix = mmdd(t).slice(0, 2);
+    const monthCount = Object.entries(curYearEntries).filter(([k, v]) => k.startsWith(prefix) && jHas(v)).length;
+    const yearCount = Object.values(curYearEntries).filter(jHas).length;
+
+    // Calculate streak
+    let streak = 0;
+    const checkDate = today0();
+    const getE = (d) => {
+      const y = d.getFullYear();
+      const k = mmdd(d);
+      return journalYears[y]?.entries?.[k];
+    };
+    if (!jHas(getE(checkDate))) {
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+    while (streak < 3660 && jHas(getE(checkDate))) {
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
+    // Last year same day
+    const lastYear = curYear - 1;
+    const todayKey = mmdd(t);
+    const ly = journalYears[lastYear]?.entries?.[todayKey] || { t: '', img: '', mood: '' };
+
+    return (
+      <>
+        <button
+          type="button"
+          className={`crm-filter ${journalViewMode === 'range' ? 'active' : ''}`}
+          onClick={() => {
+            setJournalViewMode('range');
+            setJournalCenter(null);
+            setUi(prev => ({ ...prev, viewing: true }));
+          }}
+        >
+          <span className="list-name">Around today</span>
+        </button>
+        <button
+          type="button"
+          className={`crm-filter ${journalViewMode === 'month' ? 'active' : ''}`}
+          onClick={() => {
+            setJournalViewMode('month');
+            setJournalMonth(null);
+            setUi(prev => ({ ...prev, viewing: true }));
+          }}
+        >
+          <span className="list-name">This month</span>
+        </button>
+
+        <div className="sec-label">At a glance</div>
+        <div className="j-stats">
+          <div>
+            <b>{streak}</b>
+            <span>day streak</span>
+          </div>
+          <div>
+            <b>{monthCount}</b>
+            <span>this month</span>
+          </div>
+          <div>
+            <b>{yearCount}</b>
+            <span>this year</span>
+          </div>
+        </div>
+
+        <div className="sec-label">On this day, {lastYear}</div>
+        <div className={`j-otd ${jHas(ly) ? '' : 'muted'}`}>
+          {ly.img && (
+            <div className="j-otd-img">
+              <img src={ly.img} alt="" />
+            </div>
+          )}
+          <p>
+            {ly.mood && (
+              <span className="j-otd-mood" title={moodName(ly.mood)}>
+                {ly.mood}
+              </span>
+            )}{' '}
+            {jHas(ly) ? (ly.t || '') : 'Nothing written on this day last year.'}
+          </p>
+        </div>
+      </>
+    );
+  };
+
   // Collapsed rail view
   if (collapsed) {
     return (
@@ -437,6 +529,15 @@ export const Sidebar = () => {
           onClick={() => updateBoard({ tab: 'notes' })}
         >
           <NotesIcon />
+        </button>
+        <button
+          type="button"
+          className={`hbtn ${board.tab === 'journal' && !ui.admin ? 'on' : ''}`}
+          title="Journal"
+          aria-label="Journal"
+          onClick={() => updateBoard({ tab: 'journal' })}
+        >
+          <JournalIcon />
         </button>
         {isCrmAllowed && (
           <button
@@ -555,7 +656,7 @@ export const Sidebar = () => {
           </form>
         )}
 
-        <div className={`tabs ${isCrmAllowed ? 'three' : ''}`} role="tablist">
+        <div className={`tabs ${isCrmAllowed ? 'four' : 'three'}`} role="tablist">
           <button
             type="button"
             className={`tab ${board.tab === 'lists' && !ui.admin ? 'on' : ''}`}
@@ -582,6 +683,20 @@ export const Sidebar = () => {
             <NotesIcon />
             <span className="n">{board.notes.length}</span>
           </button>
+          <button
+            type="button"
+            className={`tab ${board.tab === 'journal' && !ui.admin ? 'on' : ''}`}
+            role="tab"
+            aria-selected={board.tab === 'journal' && !ui.admin}
+            onClick={() => {
+              updateBoard({ tab: 'journal' });
+              setUi(prev => ({ ...prev, admin: false, adding: false }));
+            }}
+            title="Journal"
+            aria-label="Journal"
+          >
+            <JournalIcon />
+          </button>
           {isCrmAllowed && (
             <button
               type="button"
@@ -603,6 +718,8 @@ export const Sidebar = () => {
       <div className="lists">
         {board.tab === 'crm'
           ? renderCrmSide()
+          : board.tab === 'journal'
+          ? renderJournalSide()
           : board.tab === 'lists'
           ? renderItems(board.lists, 'lists')
           : renderItems(board.notes, 'notes')}

@@ -5,6 +5,7 @@ import { Note } from '../models/Note.js';
 import { User } from '../models/User.js';
 import { Share } from '../models/Share.js';
 import { CrmMember } from '../models/CrmMember.js';
+import { JournalYear } from '../models/Journal.js';
 import { syncShareAcrossAllUsers } from '../utils/shareSync.js';
 import { normLinkedIn } from '../controllers/crmController.js';
 import { getBackups, createBackup, getBackupConfig } from '../services/backupService.js';
@@ -1583,6 +1584,79 @@ export function registerMcpTools(server, authManager) {
       } catch (err) {
         return { content: [{ type: 'text', text: `Failed to undo: ${err.message}` }], isError: true };
       }
+    }
+  );
+
+  server.tool(
+    'journal_get_entries',
+    'Retrieve micro-journal entries (one line a day, mood, photos) for a year or specific date.',
+    {
+      year: z.number().optional().describe('Year to query (defaults to current year)'),
+      date: z.string().optional().describe('Optional date filter in MM-DD format (e.g. "10-29")')
+    },
+    async ({ year, date }) => {
+      const user = authManager.requireAuth();
+      const targetYear = year || new Date().getFullYear();
+      const doc = await JournalYear.findOne({ userId: user._id, year: targetYear }).lean();
+      const entriesMap = doc?.entries ? (doc.entries instanceof Map ? Object.fromEntries(doc.entries) : doc.entries) : {};
+
+      if (date) {
+        const entry = entriesMap[date] || { t: '', mood: '', img: '' };
+        return { content: [{ type: 'text', text: JSON.stringify({ year: targetYear, date, entry }, null, 2) }] };
+      }
+
+      return { content: [{ type: 'text', text: JSON.stringify({ year: targetYear, count: Object.keys(entriesMap).length, entries: entriesMap }, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'journal_set_entry',
+    'Set or update a daily micro-journal line and mood for a specific date (one line a day, max 300 chars).',
+    {
+      date: z.string().describe('Date in "YYYY-MM-DD" or "MM-DD" format'),
+      text: z.string().optional().describe('Journal text for the day (max 300 chars, e.g. Health / Family / Work summary)'),
+      mood: z.enum(['😄', '🙂', '😌', '🙏', '🥳', '😐', '😴', '😔', '😢', '😠', '😰', '🤒', '']).optional().describe('Mood emoji for the day')
+    },
+    async ({ date, text, mood }) => {
+      const user = authManager.requireAuth();
+      let targetYear = new Date().getFullYear();
+      let dateKey = date;
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        const parts = date.split('-');
+        targetYear = parseInt(parts[0], 10);
+        dateKey = `${parts[1]}-${parts[2]}`;
+      } else if (!/^\d{2}-\d{2}$/.test(dateKey)) {
+        return { content: [{ type: 'text', text: 'Invalid date format. Expected "YYYY-MM-DD" or "MM-DD".' }], isError: true };
+      }
+
+      let doc = await JournalYear.findOne({ userId: user._id, year: targetYear });
+      if (!doc) {
+        doc = new JournalYear({ userId: user._id, year: targetYear, entries: new Map() });
+      }
+
+      const current = (doc.entries && typeof doc.entries.get === 'function'
+        ? doc.entries.get(dateKey)
+        : doc.entries?.[dateKey]) || {};
+
+      const updated = {
+        t: text !== undefined ? String(text).slice(0, 300) : (current.t || ''),
+        img: current.img || '',
+        mood: mood !== undefined ? mood : (current.mood || ''),
+        updatedAt: new Date()
+      };
+
+      if (typeof doc.entries.set === 'function') {
+        doc.entries.set(dateKey, updated);
+      } else {
+        if (!doc.entries) doc.entries = {};
+        doc.entries[dateKey] = updated;
+      }
+
+      doc.markModified('entries');
+      await doc.save();
+
+      return { content: [{ type: 'text', text: `Saved journal entry for ${targetYear}-${dateKey}: [Mood: ${updated.mood || 'none'}] "${updated.t}".` }] };
     }
   );
 }
