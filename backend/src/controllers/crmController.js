@@ -181,6 +181,7 @@ export const updateMember = async (req, res) => {
     member.mobile = clean.mobile;
     member.email = clean.email;
     member.linkedin = clean.linkedin;
+    member.label = clean.label;
     member.plan = clean.plan;
     member.start = clean.start;
     member.end = clean.end;
