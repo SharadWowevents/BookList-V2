@@ -255,6 +255,7 @@ export const AppProvider = ({ children }) => {
   const openCrmModal = useCallback((id = null, plan = null, tab = 'details') => {
     const m = id ? crmMembers.find(x => x.id === id) : null;
     const initialPlan = plan || (crmFilter.kind === 'plan' ? crmFilter.plan : PLANS[0]);
+    const initialLabel = crmFilter.kind === 'label' && crmFilter.label !== 'none' ? crmFilter.label : '';
     const draft = m
       ? JSON.parse(JSON.stringify(m))
       : {
@@ -263,6 +264,7 @@ export const AppProvider = ({ children }) => {
           mobile: '',
           email: '',
           linkedin: '',
+          label: initialLabel,
           plan: initialPlan,
           start: ymd(today0()),
           end: '',

@@ -3,6 +3,7 @@ import Sortable from 'sortablejs';
 import { useApp } from '../context/AppContext';
 import {
   PLANS,
+  LABELS,
   crmMatches,
   timeLeft,
   nextFollowUp,
@@ -21,7 +22,8 @@ import {
   ChatIcon,
   CalendarIcon,
   NotesIcon,
-  ProfileIcon
+  ProfileIcon,
+  ArchetypeIcon
 } from './Icons';
 
 export const CrmView = () => {
@@ -75,6 +77,9 @@ export const CrmView = () => {
   }, [crmMembers, crmFilter, crmSearch]);
 
   const title = useMemo(() => {
+    if (crmFilter.kind === 'label') {
+      return crmFilter.label === 'none' ? 'No label' : (LABELS[crmFilter.label]?.avatar || 'Label');
+    }
     if (crmFilter.kind === 'plan') return crmFilter.plan;
     if (crmFilter.kind === 'expiring') return 'Expiring in 30 days';
     if (crmFilter.kind === 'due') return 'Follow-ups due';
@@ -136,19 +141,31 @@ export const CrmView = () => {
     const tl = timeLeft(m.end);
     const nf = dueInfo(nextFollowUp(m));
     const wa = waLink(m.mobile);
+    const L = LABELS[m.label];
 
     return (
       <article
         key={m.id}
-        className="mcard"
+        className={`mcard ${L ? `labelled lbl-${m.label}` : ''}`}
         data-member={m.id}
         tabIndex={0}
-        aria-label={m.name || 'Member'}
+        aria-label={`${m.name || 'Member'}${L ? `, ${L.avatar}, ${L.name}` : ''}`}
         onClick={() => openCrmModal(m.id)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') openCrmModal(m.id);
         }}
       >
+        {L && (
+          <div className="m-band">
+            <span className="m-band-ic">
+              <ArchetypeIcon label={m.label} size={30} />
+            </span>
+            <div className="m-band-t">
+              <b>{L.avatar}</b>
+              <small>{L.name} · {L.stage}</small>
+            </div>
+          </div>
+        )}
         <div className="mcard-top">
           {renderAvatar(m)}
           <div className="mcard-id">
@@ -184,6 +201,13 @@ export const CrmView = () => {
             )}
           </span>
         </div>
+        {L && (
+          <div className="m-kw">
+            {L.keywords.map(k => (
+              <span key={k}>{k}</span>
+            ))}
+          </div>
+        )}
         <div className="mrows">
           <div className="mrow">
             {m.end ? (
@@ -377,6 +401,15 @@ export const CrmView = () => {
                     </span>
                     <span className="c-plan">
                       <span className="plan-tag">{m.plan}</span>
+                      {m.label && LABELS[m.label] && (
+                        <span
+                          className={`lbl-chip lbl-${m.label}`}
+                          title={`${LABELS[m.label].avatar} · ${LABELS[m.label].name} · ${LABELS[m.label].stage}`}
+                        >
+                          <ArchetypeIcon label={m.label} size={14} />
+                          {LABELS[m.label].name}
+                        </span>
+                      )}
                     </span>
                     <span className="c-mob">
                       {m.mobile || '—'}

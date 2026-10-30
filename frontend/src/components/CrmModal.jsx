@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import {
   PLANS,
   SESSION_TYPES,
+  LABELS,
   parseYMD,
   today0,
   addMonths,
@@ -24,7 +25,8 @@ import {
   PencilIcon,
   TrashIcon,
   CalendarIcon,
-  NotesIcon
+  NotesIcon,
+  ArchetypeIcon
 } from './Icons';
 
 export const CrmModal = () => {
@@ -513,6 +515,38 @@ export const CrmModal = () => {
                       <option key={p} value={p}>{p}</option>
                     ))}
                   </select>
+                </div>
+                <div className="field full">
+                  <label htmlFor="mLabel">Label</label>
+                  <select
+                    className="input"
+                    id="mLabel"
+                    value={draft.label || ''}
+                    onChange={(e) => setDraft({ ...draft, label: e.target.value })}
+                  >
+                    <option value="">No label</option>
+                    {Object.entries(LABELS).map(([k, L]) => (
+                      <option key={k} value={k}>
+                        {L.name} — {L.stage} · {L.avatar}
+                      </option>
+                    ))}
+                  </select>
+                  {draft.label && LABELS[draft.label] && (
+                    <div className={`lbl-preview lbl-${draft.label}`}>
+                      <span className="m-band-ic">
+                        <ArchetypeIcon label={draft.label} size={26} />
+                      </span>
+                      <div className="lbl-pv-t">
+                        <b>{LABELS[draft.label].avatar}</b>
+                        <small>{LABELS[draft.label].name} · {LABELS[draft.label].stage}</small>
+                      </div>
+                      <div className="m-kw">
+                        {LABELS[draft.label].keywords.map(w => (
+                          <span key={w}>{w}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="field">
                   <label htmlFor="mStart">Start date</label>

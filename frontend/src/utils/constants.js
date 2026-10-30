@@ -38,6 +38,37 @@ export const reorderSubset = (arr, ids) => {
 export const PLANS = ["Boardroom", "QBR", "FT 1", "FT 2", "FT 3", "FT Continuity", "Alumni"];
 export const SESSION_TYPES = ["Session", "MoM", "Review", "Call"];
 
+export const LABELS = {
+  bleeding: {
+    name: "Bleeding",
+    stage: "Safety",
+    avatar: "The Firefighter",
+    keywords: ["Cash Flow", "No Leads", "Chaos"],
+    icon: '<path d="M12 2.8l8 3v6.1c0 4.7-3.4 8.6-8 9.6-4.6-1-8-4.9-8-9.6V5.8z"/><path d="M12 8.2v7.2M8.4 11.8h7.2"/>'
+  },
+  slipping: {
+    name: "Slipping",
+    stage: "Structure",
+    avatar: "The Hamster",
+    keywords: ["Low Conversion", "Low Margin"],
+    icon: '<rect x="8.5" y="2.8" width="7" height="6" rx="1.2"/><rect x="2.8" y="15.2" width="7" height="6" rx="1.2"/><rect x="14.2" y="15.2" width="7" height="6" rx="1.2"/><path d="M12 8.8v3.2M6.3 15.2V12h11.4v3.2"/>'
+  },
+  stable: {
+    name: "Stable",
+    stage: "Scale",
+    avatar: "The Sleeping Giant",
+    keywords: ["No Rhythm", "No Marketing", "Extra Capacity"],
+    icon: '<path d="M3 20h18"/><rect x="4.5" y="13" width="3.6" height="7" rx=".8"/><rect x="10.2" y="9" width="3.6" height="11" rx=".8"/><rect x="15.9" y="4.5" width="3.6" height="15.5" rx=".8"/>'
+  },
+  leading: {
+    name: "Leading",
+    stage: "Speed",
+    avatar: "The Rocket",
+    keywords: ["AI", "Automation", "Apps & Dashboards"],
+    icon: '<path d="M13.5 2.5L4.5 13.5h6.5l-1 8 9-11h-6.5z"/>'
+  }
+};
+
 export const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 export const parseYMD = v => {
@@ -94,6 +125,7 @@ export function crmMatches(m, f) {
   if (f.kind === "expired") return tl && tl.days < 0;
   if (f.kind === "due") return nf && nf.date <= ymd(today0());
   if (f.kind === "plan") return m.plan === f.plan;
+  if (f.kind === "label") return f.label === "none" ? !m.label : m.label === f.label;
   return true;
 }
 

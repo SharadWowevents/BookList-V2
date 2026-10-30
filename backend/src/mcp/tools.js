@@ -996,12 +996,13 @@ export function registerMcpTools(server, authManager) {
       mobile: z.string().optional().describe('Mobile / WhatsApp number (e.g. 98100 12345)'),
       email: z.string().optional().describe('Email address (e.g. name@company.com)'),
       linkedin: z.string().optional().describe('LinkedIn profile URL (e.g. linkedin.com/in/name)'),
+      label: z.enum(['bleeding', 'slipping', 'stable', 'leading', '']).optional().describe('Avatar archetype label: "bleeding", "slipping", "stable", "leading", or "" (none)'),
       plan: z.string().optional().describe('Plan name: "Boardroom", "QBR", "FT 1", "FT 2", "FT 3", "FT Continuity", "Alumni"'),
       start: z.string().optional().describe('Start date YYYY-MM-DD'),
       end: z.string().optional().describe('End date YYYY-MM-DD'),
       comment: z.string().optional().describe('Member notes / comments')
     },
-    async ({ action, identifier, filter = 'all', name, mobile, email, linkedin, plan, start, end, comment }) => {
+    async ({ action, identifier, filter = 'all', name, mobile, email, linkedin, label, plan, start, end, comment }) => {
       const user = authManager.requireAuth();
       requireCrm(user);
 
@@ -1013,6 +1014,7 @@ export function registerMcpTools(server, authManager) {
           mobile: m.mobile,
           email: m.email || '',
           linkedin: m.linkedin || '',
+          label: m.label || '',
           plan: m.plan,
           start: m.start,
           end: m.end,
@@ -1039,6 +1041,7 @@ export function registerMcpTools(server, authManager) {
 
         const validEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ? email.trim() : '';
         const validLinkedIn = linkedin ? normLinkedIn(linkedin) : '';
+        const validLabel = label && ['bleeding', 'slipping', 'stable', 'leading'].includes(label) ? label : '';
 
         const newMember = await CrmMember.create({
           id: memberId,
@@ -1046,6 +1049,7 @@ export function registerMcpTools(server, authManager) {
           mobile: (mobile || '').trim(),
           email: validEmail,
           linkedin: validLinkedIn,
+          label: validLabel,
           plan: selectedPlan,
           start: start || '',
           end: end || '',
@@ -1104,6 +1108,9 @@ export function registerMcpTools(server, authManager) {
             return { content: [{ type: 'text', text: 'Enter a valid LinkedIn profile link, like linkedin.com/in/name.' }], isError: true };
           }
           member.linkedin = normLinkedIn(trimmedLi);
+        }
+        if (label !== undefined) {
+          member.label = ['bleeding', 'slipping', 'stable', 'leading', ''].includes(label) ? label : '';
         }
         if (plan !== undefined) member.plan = plan;
         if (start !== undefined) member.start = start;

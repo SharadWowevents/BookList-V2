@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import Sortable from 'sortablejs';
 import { useApp } from '../context/AppContext';
-import { ACCENTS, uid, reorderSubset, PLANS, crmMatches } from '../utils/constants';
+import { ACCENTS, uid, reorderSubset, PLANS, LABELS, crmMatches } from '../utils/constants';
 import {
   PlusIcon, StarIcon, GripIcon, PanelIcon, ListPlusIcon, NotePlusIcon,
   ListsIcon, NotesIcon, GearIcon, SunIcon, MoonIcon, MonitorIcon,
-  LogoutIcon, ShieldIcon, CameraIcon, EyeIcon, UsersIcon, CrmIcon, JournalIcon
+  LogoutIcon, ShieldIcon, CameraIcon, EyeIcon, UsersIcon, CrmIcon, JournalIcon, ArchetypeIcon
 } from './Icons';
 import { mmdd, today0, jHas, moodName } from './JournalView';
 
@@ -356,19 +356,36 @@ export const Sidebar = () => {
     const all = crmMembers || [];
     const count = fl => all.filter(m => crmMatches(m, fl)).length;
 
-    const row = (fl, label, n, warn) => {
-      const on = crmFilter.kind === fl.kind && (fl.kind !== "plan" || crmFilter.plan === fl.plan);
+    const row = (fl, label, n, warn, sub) => {
+      const on = crmFilter.kind === fl.kind &&
+        (fl.kind !== "plan" || crmFilter.plan === fl.plan) &&
+        (fl.kind !== "label" || crmFilter.label === fl.label);
+
       return (
         <button
-          key={fl.kind + (fl.plan || '')}
+          key={fl.kind + (fl.plan || '') + (fl.label || '')}
           type="button"
-          className={`crm-filter ${on ? 'active' : ''}`}
+          className={`crm-filter ${on ? 'active' : ''} ${fl.label && fl.label !== 'none' ? `lf lbl-${fl.label}` : ''}`}
           onClick={() => {
-            setCrmFilter(fl.kind === 'plan' ? { kind: 'plan', plan: fl.plan } : { kind: fl.kind });
+            if (fl.kind === 'plan') {
+              setCrmFilter({ kind: 'plan', plan: fl.plan });
+            } else if (fl.kind === 'label') {
+              setCrmFilter({ kind: 'label', label: fl.label });
+            } else {
+              setCrmFilter({ kind: fl.kind });
+            }
             setUi(prev => ({ ...prev, viewing: true }));
           }}
         >
-          <span className="list-name">{label}</span>
+          {fl.label && fl.label !== 'none' && LABELS[fl.label] && (
+            <span className="lf-ic">
+              <ArchetypeIcon label={fl.label} size={18} />
+            </span>
+          )}
+          <span className="list-name">
+            {label}
+            {sub && <small className="lf-sub">{sub}</small>}
+          </span>
           <span className={`count ${warn && n ? 'warn' : ''}`}>{n}</span>
         </button>
       );
@@ -380,6 +397,11 @@ export const Sidebar = () => {
         {row({ kind: 'expiring' }, 'Expiring in 30 days', count({ kind: 'expiring' }), true)}
         {row({ kind: 'due' }, 'Follow-ups due', count({ kind: 'due' }), true)}
         {row({ kind: 'expired' }, 'Expired', count({ kind: 'expired' }), true)}
+        <div className="sec-label">Labels</div>
+        {Object.entries(LABELS).map(([k, L]) =>
+          row({ kind: 'label', label: k }, L.avatar, count({ kind: 'label', label: k }), false, `${L.name} · ${L.stage}`)
+        )}
+        {row({ kind: 'label', label: 'none' }, 'No label', count({ kind: 'label', label: 'none' }))}
         <div className="sec-label">Plans</div>
         {PLANS.map(p => row({ kind: 'plan', plan: p }, p, count({ kind: 'plan', plan: p })))}
       </>

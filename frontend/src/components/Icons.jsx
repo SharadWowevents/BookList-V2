@@ -500,4 +500,49 @@ export const SmileIcon = ({ size = 20, className = '' }) => (
   </svg>
 );
 
+export const ArchetypeIcon = ({ label, size = 24, className = '' }) => {
+  const strokeWidth = size > 24 ? 1.7 : 2;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      {label === 'bleeding' && (
+        <>
+          <path d="M12 2.8l8 3v6.1c0 4.7-3.4 8.6-8 9.6-4.6-1-8-4.9-8-9.6V5.8z" />
+          <path d="M12 8.2v7.2M8.4 11.8h7.2" />
+        </>
+      )}
+      {label === 'slipping' && (
+        <>
+          <rect x="8.5" y="2.8" width="7" height="6" rx="1.2" />
+          <rect x="2.8" y="15.2" width="7" height="6" rx="1.2" />
+          <rect x="14.2" y="15.2" width="7" height="6" rx="1.2" />
+          <path d="M12 8.8v3.2M6.3 15.2V12h11.4v3.2" />
+        </>
+      )}
+      {label === 'stable' && (
+        <>
+          <path d="M3 20h18" />
+          <rect x="4.5" y="13" width="3.6" height="7" rx=".8" />
+          <rect x="10.2" y="9" width="3.6" height="11" rx=".8" />
+          <rect x="15.9" y="4.5" width="3.6" height="15.5" rx=".8" />
+        </>
+      )}
+      {label === 'leading' && (
+        <path d="M13.5 2.5L4.5 13.5h6.5l-1 8 9-11h-6.5z" />
+      )}
+    </svg>
+  );
+};
+
+
 

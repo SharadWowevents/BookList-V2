@@ -30,6 +30,11 @@ const crmMemberSchema = new mongoose.Schema({
   mobile: { type: String, default: '', trim: true },
   email: { type: String, default: '', trim: true },
   linkedin: { type: String, default: '', trim: true },
+  label: {
+    type: String,
+    enum: ['bleeding', 'slipping', 'stable', 'leading', ''],
+    default: ''
+  },
   plan: {
     type: String,
     enum: ["Boardroom", "QBR", "FT 1", "FT 2", "FT 3", "FT Continuity", "Alumni"],

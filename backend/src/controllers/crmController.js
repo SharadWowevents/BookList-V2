@@ -20,6 +20,9 @@ export function normLinkedIn(v) {
   }
 }
 
+// Valid CRM labels / avatar archetypes
+export const VALID_LABELS = ['bleeding', 'slipping', 'stable', 'leading'];
+
 // Helper to sanitize member payload
 const sanitizeMemberInput = (d, defaultId = null) => {
   d = d || {};
@@ -27,6 +30,7 @@ const sanitizeMemberInput = (d, defaultId = null) => {
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw) ? emailRaw : '';
   const linkedinRaw = String(d.linkedin || d.linkedinRaw || '').trim().slice(0, 300);
   const validLinkedIn = normLinkedIn(linkedinRaw);
+  const label = typeof d.label === 'string' && VALID_LABELS.includes(d.label) ? d.label : '';
 
   return {
     id: (d.id || defaultId || uid()).toString().slice(0, 60),
@@ -34,6 +38,7 @@ const sanitizeMemberInput = (d, defaultId = null) => {
     mobile: (d.mobile || '').trim().slice(0, 20),
     email: validEmail,
     linkedin: validLinkedIn,
+    label,
     plan: PLANS.includes(d.plan) ? d.plan : PLANS[0],
     start: /^\d{4}-\d{2}-\d{2}$/.test(d.start) ? d.start : '',
     end: /^\d{4}-\d{2}-\d{2}$/.test(d.end) ? d.end : '',
