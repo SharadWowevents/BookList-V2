@@ -22,6 +22,14 @@ export const PublicNoteView = ({ sid, onExit }) => {
   const [shareData, setShareData] = useState(null);
   const contentRef = useRef(null);
 
+  // Enable page scrolling on body when viewing public shared document
+  useEffect(() => {
+    document.body.classList.add('public-document');
+    return () => {
+      document.body.classList.remove('public-document');
+    };
+  }, []);
+
   // Canvas hydration for sketches in public view
   const hydrateInk = useCallback((container) => {
     if (!container) return;

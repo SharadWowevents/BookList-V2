@@ -432,7 +432,38 @@ svg{display:block}
 .toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:14px 18px;border-radius:14px;font-size:1rem;max-width:min(520px,calc(100% - 32px));z-index:20;box-shadow:0 10px 30px rgba(0,0,0,.2)}
 
 /* ---------- Public Reader View ---------- */
-.pub-page{min-height:100vh;background:var(--bg);color:var(--ink);display:flex;flex-direction:column}
+body.public-document,
+body:has(.pub-page) {
+  height: auto !important;
+  min-height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.public-document #root,
+body:has(.pub-page) #root {
+  height: auto !important;
+  min-height: 100% !important;
+}
+
+.pub-page {
+  min-height: 100vh;
+  height: auto;
+  overflow-y: visible;
+  background: var(--bg);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Fallback if body remains locked with overflow: hidden */
+body:not(.public-document):not(:has(.pub-page)) .pub-page {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .pub-nav{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--panel) 85%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:14px max(24px,env(safe-area-inset-right,0px)) 14px max(24px,env(safe-area-inset-left,0px));display:flex;align-items:center;justify-content:space-between}
 .pub-brand{font-family:var(--display);font-weight:700;font-size:1.25rem;color:var(--ink);display:flex;align-items:center;gap:6px;text-decoration:none}
 .pub-brand span{color:var(--accent)}
@@ -445,6 +476,7 @@ svg{display:block}
 .pub-avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover}
 .pub-content{font-size:1.15rem;line-height:1.7}
 .pub-foot{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);color:var(--muted);font-size:.95rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+
 
 /* ---------- CRM ---------- */
 .tabs.three{grid-template-columns:repeat(3,1fr)}
@@ -615,20 +647,6 @@ body.modal-open{overflow:hidden}
   .crm-tr .c-sess{grid-column:1/-1;font-size:.9rem;color:var(--muted)}
 }
 
-/* ---------- Public Reader View ---------- */
-.pub-page{min-height:100vh;background:var(--bg);color:var(--ink);display:flex;flex-direction:column}
-.pub-nav{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--panel) 85%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:14px max(24px,env(safe-area-inset-right,0px)) 14px max(24px,env(safe-area-inset-left,0px));display:flex;align-items:center;justify-content:space-between}
-.pub-brand{font-family:var(--display);font-weight:700;font-size:1.25rem;color:var(--ink);display:flex;align-items:center;gap:6px;text-decoration:none}
-.pub-brand span{color:var(--accent)}
-.pub-nav-actions{display:flex;align-items:center;gap:10px}
-.pub-main{flex:1;max-width:760px;width:100%;margin:0 auto;padding:48px max(20px,env(safe-area-inset-right,0px)) 80px max(20px,env(safe-area-inset-left,0px))}
-.pub-title{font-family:var(--display);font-weight:700;font-size:clamp(2.2rem,6vw,3.2rem);line-height:1.1;letter-spacing:-.03em;margin:0 0 16px;text-wrap:balance}
-.pub-byline{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:1rem;margin-bottom:36px}
-.pub-byline b{color:var(--ink);font-weight:600}
-.pub-avatar{width:36px;height:36px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:1rem;flex:none}
-.pub-avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover}
-.pub-content{font-size:1.15rem;line-height:1.7}
-.pub-foot{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);color:var(--muted);font-size:.95rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
 
 /* ---------- audio notes on todos ---------- */
 .todo-main{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;padding:4px 4px}
