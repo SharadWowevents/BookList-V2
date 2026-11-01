@@ -42,7 +42,7 @@ const formatFullDate = (date) => {
 };
 
 export const AdminPanel = () => {
-  const { setUi, showToast, session } = useApp();
+  const { setUi, showToast, session, board, navigate } = useApp();
 
   useEffect(() => {
     if (session?.role !== 'admin') {
@@ -411,7 +411,7 @@ export const AdminPanel = () => {
   }, [logs, logCategory, logSearch]);
 
   const credsText = creds
-    ? `MyDeepwork sign-in\nLink: ${window.location.origin}\nUsername: ${creds.u}\nPassword: ${creds.pw}`
+    ? `MyDeepwork sign-in\nLink: ${window.location.origin}/login\nUsername: ${creds.u}\nPassword: ${creds.pw}`
     : '';
 
   const copyCreds = () => {
@@ -429,7 +429,10 @@ export const AdminPanel = () => {
           className="icon-btn back"
           id="back"
           aria-label="Back"
-          onClick={() => setUi(prev => ({ ...prev, admin: false }))}
+          onClick={() => {
+            setUi(prev => ({ ...prev, admin: false }));
+            navigate('/' + (board?.tab || 'notes'));
+          }}
         >
           <BackIcon />
         </button>

@@ -1023,7 +1023,7 @@ ${pubAuthor ? `<div class="by">${avatarHtml}<span><b>${name}</b>${when ? ` • L
   };
 
   const copyPublicLink = async () => {
-    const url = `${window.location.origin}${window.location.pathname}#p.${pubSid}`;
+    const url = `${window.location.origin}/p/${pubSid}`;
     try {
       await navigator.clipboard.writeText(url);
       showToast('Public link copied to clipboard.');
@@ -1112,7 +1112,7 @@ ${pubAuthor ? `<div class="by">${avatarHtml}<span><b>${name}</b>${when ? ` • L
           } : n)
         });
       }
-      const url = `${window.location.origin}${window.location.pathname}#s.${sid}`;
+      const url = `${window.location.origin}/s/${sid}`;
       await navigator.clipboard.writeText(url);
       showToast('Share link copied to clipboard.');
     } catch (err) {
@@ -1122,7 +1122,7 @@ ${pubAuthor ? `<div class="by">${avatarHtml}<span><b>${name}</b>${when ? ` • L
   };
 
   const shareUrl = shareSid
-    ? `${window.location.origin}${window.location.pathname}#s.${shareSid}`
+    ? `${window.location.origin}/s/${shareSid}`
     : 'Generating link…';
 
   const renderAvatar = () => {
@@ -1256,7 +1256,7 @@ ${pubAuthor ? `<div class="by">${avatarHtml}<span><b>${name}</b>${when ? ` • L
                 <input
                   className="input"
                   readOnly
-                  value={`${window.location.origin}${window.location.pathname}#p.${pubSid}`}
+                  value={`${window.location.origin}/p/${pubSid}`}
                   aria-label="Public view link"
                   onClick={(e) => e.target.select()}
                 />
@@ -1273,7 +1273,7 @@ ${pubAuthor ? `<div class="by">${avatarHtml}<span><b>${name}</b>${when ? ` • L
 
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '10px' }}>
                 <a
-                  href={`${window.location.origin}${window.location.pathname}#p.${pubSid}`}
+                  href={`${window.location.origin}/p/${pubSid}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="pill plain"

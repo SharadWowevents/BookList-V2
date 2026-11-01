@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Sidebar } from './components/Sidebar';
 import { ListView } from './components/ListView';
@@ -12,48 +12,81 @@ import { PublicNoteView } from './components/PublicNoteView';
 import './App.css';
 
 const Shell = () => {
-  const { session, board, ui, toast, triggerUndo } = useApp();
+  const { session, board, ui, toast, triggerUndo, route, navigate } = useApp();
 
-  // Detect public view links in URL: #p.<sid> or /p/<sid>
-  const extractPublicSid = () => {
-    const hash = window.location.hash;
-    const mHash = /^#p\.(?:([A-Za-z0-9_-]+)\.)?([a-z0-9]+)$/i.exec(hash);
-    if (mHash) return mHash[2];
-    const mPath = /^\/p\/([a-z0-9]+)$/i.exec(window.location.pathname);
-    return mPath ? mPath[1] : null;
-  };
-
-  const [publicSid, setPublicSid] = useState(extractPublicSid);
-
+  // 1. Root route: redirect to wowos.in immediately
   useEffect(() => {
-    const checkHash = () => {
-      setPublicSid(extractPublicSid());
-    };
-    window.addEventListener('hashchange', checkHash);
-    window.addEventListener('popstate', checkHash);
-    return () => {
-      window.removeEventListener('hashchange', checkHash);
-      window.removeEventListener('popstate', checkHash);
-    };
-  }, []);
+    if (route.name === 'root') {
+      window.location.replace('https://wowos.in');
+    }
+  }, [route.name]);
 
-  if (publicSid) {
+  if (route.name === 'root') {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#0a0a0a',
+        color: '#888',
+        fontFamily: 'Figtree, sans-serif'
+      }}>
+        Redirecting to wowos.in…
+      </div>
+    );
+  }
+
+  // 2. Public shared note view (/p/:sid or #p.:sid)
+  if (route.name === 'public' && route.sid) {
     return (
       <PublicNoteView
-        sid={publicSid}
+        sid={route.sid}
         onExit={() => {
-          if (window.location.pathname.startsWith('/p/')) {
-            window.history.pushState(null, '', '/');
+          if (session) {
+            navigate('/' + (board.tab || 'notes'));
+          } else {
+            navigate('/login');
           }
-          window.location.hash = '';
-          setPublicSid(null);
         }}
       />
     );
   }
 
-  if (!session) return <Login />;
+  // 3. Unauthenticated state handling
+  if (!session) {
+    if (route.name !== 'login' && route.name !== 'share') {
+      const redirectTarget = window.location.pathname + window.location.search;
+      navigate(`/login?redirect=${encodeURIComponent(redirectTarget)}`, { replace: true });
+    }
+    return <Login />;
+  }
 
+  // 4. If logged in and on /login, redirect to redirect target or active workspace tab
+  if (route.name === 'login') {
+    const params = new URLSearchParams(window.location.search);
+    const redirect = params.get('redirect');
+    if (redirect && redirect.startsWith('/') && redirect !== '/login' && redirect !== '/') {
+      navigate(redirect, { replace: true });
+    } else {
+      navigate('/' + (board.tab || 'notes'), { replace: true });
+    }
+    return null;
+  }
+
+  // 5. If on /admin but not admin, bounce to active tab
+  if (route.name === 'admin' && session.role !== 'admin') {
+    navigate('/' + (board.tab || 'notes'), { replace: true });
+    return null;
+  }
+
+  // 6. Handle unknown routes for logged in users
+  if (route.name === 'unknown') {
+    navigate('/' + (board.tab || 'notes'), { replace: true });
+    return null;
+  }
+
+  // 7. Main authenticated workspace view
   return (
     <div className={`app ${ui.viewing ? 'viewing' : ''} ${ui.collapsed ? 'collapsed' : ''}`}>
       <Sidebar />
@@ -96,5 +129,3 @@ export default function App() {
     </AppProvider>
   );
 }
-
-

@@ -713,7 +713,7 @@ export const ListView = () => {
           } : l)
         });
       }
-      const url = `${window.location.origin}${window.location.pathname}#s.${sid}`;
+      const url = `${window.location.origin}/s/${sid}`;
       await navigator.clipboard.writeText(url);
       showToast('Share link copied to clipboard.');
     } catch (err) {
@@ -723,7 +723,7 @@ export const ListView = () => {
   };
 
   const shareUrl = shareSid
-    ? `${window.location.origin}${window.location.pathname}#s.${shareSid}`
+    ? `${window.location.origin}/s/${shareSid}`
     : 'Generating link…';
 
   const renderTodoRow = (t) => {

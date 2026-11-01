@@ -15,7 +15,17 @@ async function sha256(str) {
 }
 
 export const Login = () => {
-  const { setSession, showToast, pendingShareSid } = useApp();
+  const { setSession, showToast, pendingShareSid, navigate } = useApp();
+
+  const handlePostLoginNavigation = (user) => {
+    const params = new URLSearchParams(window.location.search);
+    const redirect = params.get('redirect');
+    if (redirect && redirect.startsWith('/') && redirect !== '/login' && redirect !== '/') {
+      navigate(redirect, { replace: true });
+    } else {
+      navigate('/' + (user?.tab || 'notes'), { replace: true });
+    }
+  };
 
   const [mode, setMode] = useState('local');
   const [name, setName] = useState('');
@@ -61,6 +71,7 @@ export const Login = () => {
         setToken(res.token);
         setSession(res.user);
         showToast(`Welcome back, ${res.user.name}!`);
+        handlePostLoginNavigation(res.user);
         return;
       }
     } catch (err) {
@@ -91,7 +102,9 @@ export const Login = () => {
         } catch {}
       }
 
-      setSession({ mode: 'local', key, name: trimmedName });
+      const localUser = { mode: 'local', key, name: trimmedName };
+      setSession(localUser);
+      handlePostLoginNavigation(localUser);
     }
     setLoading(false);
   };
@@ -115,6 +128,7 @@ export const Login = () => {
         setToken(res.token);
         setSession(res.user);
         showToast(`Signed in as ${res.user.name}.`);
+        handlePostLoginNavigation(res.user);
       }
     } catch (err) {
       setError(err.message || "That username and password don't match.");

@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { ACCENTS, starterBoard, PLANS, ymd, today0, uid } from '../utils/constants';
 import { authAPI, boardAPI, notesAPI, sharesAPI, crmAPI, journalAPI, setToken, getToken } from '../services/api';
+import { parseRoute, navigate as routerNavigate } from '../utils/router';
 
 const shrinkImage = (file, maxSide = 1400, quality = 0.82) => {
   return new Promise((resolve, reject) => {
@@ -131,11 +132,56 @@ export const AppProvider = ({ children }) => {
     collapsed
   }));
 
+  const [route, setRoute] = useState(parseRoute);
+
+  useEffect(() => {
+    const syncRoute = () => {
+      setRoute(parseRoute());
+    };
+    window.addEventListener('popstate', syncRoute);
+    window.addEventListener('hashchange', syncRoute);
+    return () => {
+      window.removeEventListener('popstate', syncRoute);
+      window.removeEventListener('hashchange', syncRoute);
+    };
+  }, []);
+
+  const navigate = useCallback((to, opts) => {
+    routerNavigate(to, opts);
+    setRoute(parseRoute());
+  }, []);
+
+  useEffect(() => {
+    if (route.name === 'crm') {
+      setBoardState(prev => prev.tab !== 'crm' ? { ...prev, tab: 'crm' } : prev);
+      setUi(prev => prev.admin ? { ...prev, admin: false } : prev);
+    } else if (route.name === 'journal') {
+      setBoardState(prev => prev.tab !== 'journal' ? { ...prev, tab: 'journal' } : prev);
+      setUi(prev => prev.admin ? { ...prev, admin: false } : prev);
+    } else if (route.name === 'lists') {
+      setBoardState(prev => prev.tab !== 'lists' ? { ...prev, tab: 'lists' } : prev);
+      setUi(prev => prev.admin ? { ...prev, admin: false } : prev);
+    } else if (route.name === 'notes') {
+      setBoardState(prev => prev.tab !== 'notes' ? { ...prev, tab: 'notes' } : prev);
+      setUi(prev => prev.admin ? { ...prev, admin: false } : prev);
+    } else if (route.name === 'admin') {
+      setUi(prev => !prev.admin ? { ...prev, admin: true } : prev);
+    }
+  }, [route.name]);
+
   const [pendingShareSid, setPendingShareSid] = useState(() => {
     try {
+      const pathname = window.location.pathname || '';
+      const mPath = /^\/s\/([a-zA-Z0-9_-]+)$/i.exec(pathname);
+      if (mPath && mPath[1] !== 'local') {
+        sessionStorage.setItem('listbook:pending_share', mPath[1]);
+        return mPath[1];
+      }
       const hash = window.location.hash || '';
-      if (!hash || hash.startsWith('#s.local.')) return null;
-      const m = /^#s\.(?:([A-Za-z0-9_-]+)\.)?([a-z0-9]+)$/i.exec(hash);
+      if (!hash || hash.startsWith('#s.local.')) {
+        return sessionStorage.getItem('listbook:pending_share') || null;
+      }
+      const m = /^#s\.(?:([A-Za-z0-9_-]+)\.)?([a-zA-Z0-9_-]+)$/i.exec(hash);
       if (m && m[1] !== 'local' && m[2] && m[2] !== 'local') {
         sessionStorage.setItem('listbook:pending_share', m[2]);
         return m[2];
@@ -1096,30 +1142,32 @@ export const AppProvider = ({ children }) => {
     }
   }, []);
 
-  // Handle share links in URL hash: #s.<sid> or #s.<owner>.<sid>
+  // Handle share links in URL: /s/:sid or #s.<sid>
   useEffect(() => {
-    const handleHash = () => {
+    let sid = null;
+    if (route.name === 'share' && route.sid) {
+      sid = route.sid;
+    } else {
       const hash = window.location.hash;
-      if (!hash || hash.startsWith('#s.local.')) return;
-      const m = /^#s\.(?:([A-Za-z0-9_-]+)\.)?([a-z0-9]+)$/i.exec(hash);
-      if (!m || m[1] === 'local') return;
-      const sid = m[2];
-      if (!sid || sid === 'local') return;
-
-      if (!session) {
-        // User not logged in: stash pending share for login screen
-        try { sessionStorage.setItem('listbook:pending_share', sid); } catch {}
-        setPendingShareSid(sid);
-      } else {
-        // User is logged in: ingest immediately
-        ingestShare(sid);
+      if (hash && !hash.startsWith('#s.local.')) {
+        const m = /^#s\.(?:([A-Za-z0-9_-]+)\.)?([a-zA-Z0-9_-]+)$/i.exec(hash);
+        if (m && m[1] !== 'local' && m[2] && m[2] !== 'local') {
+          sid = m[2];
+        }
       }
-    };
+    }
 
-    handleHash();
-    window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
-  }, [session, ingestShare]);
+    if (!sid) return;
+
+    if (!session) {
+      // User not logged in: stash pending share for login screen
+      try { sessionStorage.setItem('listbook:pending_share', sid); } catch {}
+      setPendingShareSid(sid);
+    } else {
+      // User is logged in: ingest immediately
+      ingestShare(sid);
+    }
+  }, [route, session, ingestShare]);
 
   const setSession = useCallback((sess) => {
     setSessionState(sess);
@@ -1184,11 +1232,14 @@ export const AppProvider = ({ children }) => {
     });
     setPhotoState(null);
     noteCacheRef.current = {};
+    navigate('/login', { replace: true });
     if (msg) showToast(msg);
-  }, [showToast]);
+  }, [showToast, navigate]);
 
   return (
     <AppContext.Provider value={{
+      route,
+      navigate,
       session,
       setSession,
       signOut,

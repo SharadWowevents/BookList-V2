@@ -60,10 +60,15 @@ app.use('/api/journal', journalRoutes);
 setupOAuthRoutes(app);
 setupMcpSseRoutes(app);
 
+// Root path redirect to wowos.in
+app.get('/', (req, res) => {
+  res.redirect(301, 'https://wowos.in');
+});
+
 // Public view link redirect
 app.get('/p/:sid', (req, res) => {
-  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-  res.redirect(`${clientUrl}/#p.${req.params.sid}`);
+  const clientUrl = process.env.CLIENT_URL || 'https://mydeepwork.in';
+  res.redirect(`${clientUrl}/p/${req.params.sid}`);
 });
 
 // 404 Handler

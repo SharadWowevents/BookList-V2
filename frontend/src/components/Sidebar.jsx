@@ -16,7 +16,8 @@ export const Sidebar = () => {
     collapsed, setCollapsed, photo, savePhoto, removePhoto,
     showToast,
     crmMembers, crmFilter, setCrmFilter, isCrmAllowed,
-    journalYears, journalViewMode, setJournalViewMode, setJournalCenter, setJournalMonth
+    journalYears, journalViewMode, setJournalViewMode, setJournalCenter, setJournalMonth,
+    navigate
   } = useApp();
 
   const isAdmin = session?.role === 'admin';
@@ -51,6 +52,7 @@ export const Sidebar = () => {
     });
     setNewListName('');
     setUi(prev => ({ ...prev, adding: false, viewing: true, admin: false }));
+    navigate('/lists');
   };
 
   const handleAddNote = () => {
@@ -61,6 +63,7 @@ export const Sidebar = () => {
       tab: 'notes'
     });
     setUi(prev => ({ ...prev, adding: false, viewing: true, admin: false }));
+    navigate('/notes');
   };
 
   const toggleStar = (e, item, kind) => {
@@ -194,6 +197,7 @@ export const Sidebar = () => {
               tab: isList ? 'lists' : 'notes'
             });
             setUi(prev => ({ ...prev, viewing: true, admin: false, confirm: false, sharing: false, publishing: false }));
+            navigate(isList ? '/lists' : '/notes');
           }}
         >
           <span className="grip" aria-hidden="true" title="Drag to reorder"><GripIcon /></span>
@@ -338,6 +342,7 @@ export const Sidebar = () => {
           className="menu-item"
           onClick={() => {
             setUi(prev => ({ ...prev, menu: false, admin: true, viewing: true }));
+            navigate('/admin');
           }}
         >
           <ShieldIcon /> Admin · People
@@ -543,7 +548,11 @@ export const Sidebar = () => {
           className={`hbtn ${board.tab === 'lists' && !ui.admin ? 'on' : ''}`}
           title="Lists"
           aria-label="Lists"
-          onClick={() => updateBoard({ tab: 'lists' })}
+          onClick={() => {
+            updateBoard({ tab: 'lists' });
+            setUi(prev => ({ ...prev, admin: false }));
+            navigate('/lists');
+          }}
         >
           <ListsIcon />
         </button>
@@ -552,7 +561,11 @@ export const Sidebar = () => {
           className={`hbtn ${board.tab === 'notes' && !ui.admin ? 'on' : ''}`}
           title="Notes"
           aria-label="Notes"
-          onClick={() => updateBoard({ tab: 'notes' })}
+          onClick={() => {
+            updateBoard({ tab: 'notes' });
+            setUi(prev => ({ ...prev, admin: false }));
+            navigate('/notes');
+          }}
         >
           <NotesIcon />
         </button>
@@ -561,7 +574,11 @@ export const Sidebar = () => {
           className={`hbtn ${board.tab === 'journal' && !ui.admin ? 'on' : ''}`}
           title="Journal"
           aria-label="Journal"
-          onClick={() => updateBoard({ tab: 'journal' })}
+          onClick={() => {
+            updateBoard({ tab: 'journal' });
+            setUi(prev => ({ ...prev, admin: false }));
+            navigate('/journal');
+          }}
         >
           <JournalIcon />
         </button>
@@ -571,7 +588,11 @@ export const Sidebar = () => {
             className={`hbtn ${board.tab === 'crm' && !ui.admin ? 'on' : ''}`}
             title="CRM"
             aria-label="CRM"
-            onClick={() => updateBoard({ tab: 'crm' })}
+            onClick={() => {
+              updateBoard({ tab: 'crm' });
+              setUi(prev => ({ ...prev, admin: false }));
+              navigate('/crm');
+            }}
           >
             <CrmIcon />
           </button>
@@ -582,7 +603,10 @@ export const Sidebar = () => {
             className={`hbtn ${ui.admin ? 'on' : ''}`}
             title="Admin · People"
             aria-label="Admin page"
-            onClick={() => setUi(prev => ({ ...prev, admin: true, viewing: true }))}
+            onClick={() => {
+              setUi(prev => ({ ...prev, admin: true, viewing: true }));
+              navigate('/admin');
+            }}
           >
             <ShieldIcon />
           </button>
@@ -619,6 +643,7 @@ export const Sidebar = () => {
               onClick={() => {
                 updateBoard({ tab: 'lists' });
                 setUi(prev => ({ ...prev, adding: !prev.adding, admin: false }));
+                navigate('/lists');
               }}
             >
               <ListPlusIcon />
@@ -639,7 +664,10 @@ export const Sidebar = () => {
                 className={`hbtn ${ui.admin ? 'on' : ''}`}
                 title="Admin · People"
                 aria-label="Admin page"
-                onClick={() => setUi(prev => ({ ...prev, admin: true, viewing: true }))}
+                onClick={() => {
+                  setUi(prev => ({ ...prev, admin: true, viewing: true }));
+                  navigate('/admin');
+                }}
               >
                 <ShieldIcon />
               </button>
@@ -691,6 +719,7 @@ export const Sidebar = () => {
             onClick={() => {
               updateBoard({ tab: 'lists' });
               setUi(prev => ({ ...prev, admin: false, adding: false }));
+              navigate('/lists');
             }}
           >
             <ListsIcon />
@@ -704,6 +733,7 @@ export const Sidebar = () => {
             onClick={() => {
               updateBoard({ tab: 'notes' });
               setUi(prev => ({ ...prev, admin: false, adding: false }));
+              navigate('/notes');
             }}
           >
             <NotesIcon />
@@ -717,6 +747,7 @@ export const Sidebar = () => {
             onClick={() => {
               updateBoard({ tab: 'journal' });
               setUi(prev => ({ ...prev, admin: false, adding: false }));
+              navigate('/journal');
             }}
             title="Journal"
             aria-label="Journal"
@@ -732,6 +763,7 @@ export const Sidebar = () => {
               onClick={() => {
                 updateBoard({ tab: 'crm' });
                 setUi(prev => ({ ...prev, admin: false, adding: false }));
+                navigate('/crm');
               }}
             >
               <CrmIcon />

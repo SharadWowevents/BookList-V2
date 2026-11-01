@@ -11,6 +11,16 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Figtree:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&display=swap" />
     <script>
       (function() {
+        // Instant redirect for default root route to wowos.in
+        try {
+          var p = window.location.pathname;
+          var h = window.location.hash || '';
+          if ((p === '/' || p === '') && !h.startsWith('#p.') && !h.startsWith('#s.') && !h.startsWith('#/') && !h.startsWith('#crm') && !h.startsWith('#notes') && !h.startsWith('#lists') && !h.startsWith('#journal') && !h.startsWith('#admin') && !h.startsWith('#login')) {
+            window.location.replace('https://wowos.in');
+            return;
+          }
+        } catch(e) {}
+
         try {
           var t = localStorage.getItem('listbook:theme');
           if (t) {
