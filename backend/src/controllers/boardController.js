@@ -21,7 +21,7 @@ export const getBoard = async (req, res) => {
     ];
 
     if (shareSids.length > 0) {
-      const shares = await Share.find({ sid: { $in: shareSids } });
+      const shares = await Share.find({ sid: { $in: shareSids } }).populate('ownerId', 'photo');
       const shareMap = new Map(shares.map(s => [s.sid, s]));
 
       lists = lists.map(l => {
@@ -36,7 +36,8 @@ export const getBoard = async (req, res) => {
             shared: {
               ...(l.shared || {}),
               mode: sh.mode,
-              ownerName: sh.ownerName
+              ownerName: sh.ownerName,
+              ownerPhoto: sh.ownerId?.photo || null
             }
           };
         }
@@ -60,7 +61,8 @@ export const getBoard = async (req, res) => {
             shared: {
               ...(n.shared || {}),
               mode: sh.mode,
-              ownerName: sh.ownerName
+              ownerName: sh.ownerName,
+              ownerPhoto: sh.ownerId?.photo || null
             }
           };
         }

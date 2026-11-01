@@ -229,7 +229,13 @@ export const PublicNoteView = ({ sid, onExit }) => {
         <h1 className="pub-title">{title}</h1>
 
         <div className="pub-byline">
-          <span className="pub-avatar">{letter}</span>
+          <span className="pub-avatar">
+            {shareData.ownerPhoto ? (
+              <img src={shareData.ownerPhoto} alt={author} />
+            ) : (
+              letter
+            )}
+          </span>
           <span>
             <b>{author}</b>
             {when ? ` • Last updated ${when}` : ''}

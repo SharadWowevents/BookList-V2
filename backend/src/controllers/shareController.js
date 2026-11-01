@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { Share } from '../models/Share.js';
 import { List } from '../models/List.js';
 import { Note } from '../models/Note.js';
+import { User } from '../models/User.js';
 import { syncShareAcrossAllUsers, broadcastShareRevoked } from '../utils/shareSync.js';
 
 const uid = () => (Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)).replace(/[^a-z0-9]/g, '');
@@ -137,11 +138,17 @@ export const getShare = async (req, res) => {
     }
 
     const isOwn = req.user ? share.ownerId.equals(req.user._id) : false;
+    let ownerPhoto = null;
+    try {
+      const owner = await User.findById(share.ownerId).select('photo');
+      if (owner?.photo) ownerPhoto = owner.photo;
+    } catch {}
 
     res.json({
       sid: share.sid,
       itemId: share.itemId,
       ownerName: share.ownerName,
+      ownerPhoto,
       ownerId: share.ownerId,
       kind: share.kind,
       mode: share.mode,

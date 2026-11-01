@@ -527,6 +527,12 @@ export const AppProvider = ({ children }) => {
     }
   });
 
+  useEffect(() => {
+    if (session?.photo !== undefined) {
+      setPhotoState(session.photo || null);
+    }
+  }, [session?.photo]);
+
   const savePhoto = useCallback(async (url) => {
     if (!session) return;
     try {
@@ -539,11 +545,20 @@ export const AppProvider = ({ children }) => {
         setPhotoState(null);
       }
 
+      setSessionState(prev => prev ? { ...prev, photo: url } : prev);
+      try {
+        const stored = JSON.parse(localStorage.getItem('listbook:session') || '{}');
+        stored.photo = url;
+        localStorage.setItem('listbook:session', JSON.stringify(stored));
+      } catch {}
+
       // Sync with MongoDB backend
       if (getToken()) {
         await authAPI.updateProfile({ photo: url });
       }
-    } catch {}
+    } catch (err) {
+      console.error('savePhoto error:', err);
+    }
   }, [session]);
 
   const removePhoto = useCallback(() => {

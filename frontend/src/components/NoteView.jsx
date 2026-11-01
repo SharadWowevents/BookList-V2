@@ -1126,14 +1126,15 @@ ${pubAuthor ? `<div class="by">${avatarHtml}<span><b>${name}</b>${when ? ` • L
     : 'Generating link…';
 
   const renderAvatar = () => {
-    if (photo) {
+    const avatarPhoto = !isOwn ? activeNote?.shared?.ownerPhoto : photo;
+    if (avatarPhoto) {
       return (
         <span className="avatar sm">
-          <img src={photo} alt="" />
+          <img src={avatarPhoto} alt="" />
         </span>
       );
     }
-    const letter = (session?.name || 'Y').trim().charAt(0).toUpperCase();
+    const letter = ((!isOwn ? activeNote?.shared?.ownerName : session?.name) || 'Y').trim().charAt(0).toUpperCase();
     return <span className="avatar sm">{letter}</span>;
   };
 

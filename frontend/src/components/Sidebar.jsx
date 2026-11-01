@@ -149,8 +149,12 @@ export const Sidebar = () => {
         savePhoto(dataUrl);
         showToast('Profile photo updated.');
         setUi(prev => ({ ...prev, menu: false }));
+        if (e.target) e.target.value = '';
       };
-      img.onerror = () => showToast("Couldn't read image file.");
+      img.onerror = () => {
+        showToast("Couldn't read image file.");
+        if (e.target) e.target.value = '';
+      };
       img.src = reader.result;
     };
     reader.readAsDataURL(file);

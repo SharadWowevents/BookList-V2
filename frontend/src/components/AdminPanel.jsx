@@ -668,7 +668,11 @@ export const AdminPanel = () => {
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                               <span className="avatar sm">
-                                {(editName || u.name || u.u).trim().charAt(0).toUpperCase()}
+                                {u.photo ? (
+                                  <img src={u.photo} alt={editName || u.name || u.u} />
+                                ) : (
+                                  (editName || u.name || u.u).trim().charAt(0).toUpperCase()
+                                )}
                               </span>
                               <span style={{ fontWeight: 600, fontSize: '1rem' }}>
                                 Rename {isSelf ? 'Your Account' : `@${u.u}`}
@@ -741,7 +745,11 @@ export const AdminPanel = () => {
                     return (
                       <div key={u.u} className={`person ${isOff ? 'off' : ''}`}>
                         <span className="avatar sm">
-                          {(u.name || u.u).trim().charAt(0).toUpperCase()}
+                          {u.photo ? (
+                            <img src={u.photo} alt={u.name || u.u} />
+                          ) : (
+                            (u.name || u.u).trim().charAt(0).toUpperCase()
+                          )}
                         </span>
                         <div className="person-main">
                           <div className="person-name">

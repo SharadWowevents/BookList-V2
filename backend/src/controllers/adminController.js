@@ -70,6 +70,7 @@ export const getUsers = async (req, res) => {
         role: u.role,
         crm: !!u.crm,
         authType: u.authType,
+        photo: u.photo || null,
         lastSeen: u.lastSeen,
         createdAt: u.createdAt
       }))
@@ -158,6 +159,7 @@ export const createUser = async (req, res) => {
       status: newUser.status,
       role: newUser.role,
       crm: !!newUser.crm,
+      photo: newUser.photo || null,
       createdAt: newUser.createdAt
     });
   } catch (err) {
@@ -188,7 +190,8 @@ export const toggleUserCrm = async (req, res) => {
     res.json({
       u: user.username,
       name: user.name,
-      crm: user.crm
+      crm: user.crm,
+      photo: user.photo || null
     });
   } catch (err) {
     console.error('toggleUserCrm error:', err);
@@ -218,7 +221,8 @@ export const toggleUserStatus = async (req, res) => {
     res.json({
       u: user.username,
       name: user.name,
-      status: user.status
+      status: user.status,
+      photo: user.photo || null
     });
   } catch (err) {
     console.error('toggleUserStatus error:', err);
@@ -362,6 +366,7 @@ export const renameUser = async (req, res) => {
         role: user.role,
         crm: !!user.crm,
         authType: user.authType,
+        photo: user.photo || null,
         lastSeen: user.lastSeen,
         createdAt: user.createdAt
       },

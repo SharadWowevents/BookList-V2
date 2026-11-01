@@ -1431,7 +1431,7 @@ export function registerMcpTools(server, authManager) {
       }
 
       if (action === 'list') {
-        const users = await User.find({}, 'username name status role crm createdAt').sort({ createdAt: -1 });
+        const users = await User.find({}, 'username name status role crm photo createdAt').sort({ createdAt: -1 });
         return { content: [{ type: 'text', text: JSON.stringify({ count: users.length, users }, null, 2) }] };
       }
 

@@ -856,7 +856,11 @@ export const ListView = () => {
           {isShared && (
             <div className="byline">
               <span className="avatar sm">
-                {(activeList.shared?.ownerName || 'Y').trim().charAt(0).toUpperCase()}
+                {activeList.shared?.ownerPhoto ? (
+                  <img src={activeList.shared.ownerPhoto} alt="" />
+                ) : (
+                  (activeList.shared?.ownerName || 'Y').trim().charAt(0).toUpperCase()
+                )}
               </span>
               <span className="txt">
                 {isOwn
@@ -897,7 +901,11 @@ export const ListView = () => {
             {isShared && !isOwn ? (
               <span className="byline">
                 <span className="avatar sm">
-                  {(activeList.shared?.ownerName || 'Y').trim().charAt(0).toUpperCase()}
+                  {activeList.shared?.ownerPhoto ? (
+                    <img src={activeList.shared.ownerPhoto} alt="" />
+                  ) : (
+                    (activeList.shared?.ownerName || 'Y').trim().charAt(0).toUpperCase()
+                  )}
                 </span>
                 <span className="txt">Shared by {activeList.shared?.ownerName || 'Someone'}</span>
               </span>
