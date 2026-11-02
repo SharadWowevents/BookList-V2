@@ -152,7 +152,7 @@ export const Login = () => {
         {mode === 'local' ? (
           <form onSubmit={handleLocalSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} autoComplete="off">
             <div className="field">
-              <label htmlFor="lname">Name</label>
+              <label htmlFor="lname">Name <span className="req-star" aria-hidden="true">*</span></label>
               <input
                 className="input"
                 id="lname"
@@ -166,7 +166,7 @@ export const Login = () => {
               />
             </div>
             <div className="field">
-              <label htmlFor="lpin">4-digit PIN</label>
+              <label htmlFor="lpin">4-digit PIN <span className="req-star" aria-hidden="true">*</span></label>
               <input
                 className="input"
                 id="lpin"
@@ -204,7 +204,7 @@ export const Login = () => {
         ) : (
           <form onSubmit={handleTeamSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} autoComplete="on">
             <div className="field">
-              <label htmlFor="aUser">Username</label>
+              <label htmlFor="aUser">Username <span className="req-star" aria-hidden="true">*</span></label>
               <input
                 className="input"
                 id="aUser"
@@ -222,7 +222,7 @@ export const Login = () => {
               />
             </div>
             <div className="field">
-              <label htmlFor="aPass">Password</label>
+              <label htmlFor="aPass">Password <span className="req-star" aria-hidden="true">*</span></label>
               <div className="pw-wrap">
                 <input
                   className="input"

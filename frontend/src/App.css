@@ -67,6 +67,7 @@ svg{display:block}
 .tag{color:var(--muted);font-size:1.15rem;line-height:1.45;margin-top:-8px}
 .field{display:flex;flex-direction:column;gap:8px}
 .field label{font-size:.8rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.req-star{color:var(--danger,#E5735F);margin-left:3px;font-weight:700}
 .input{width:100%;font-size:1.25rem;padding:16px 18px;border-radius:14px;border:1.5px solid var(--line);background:var(--panel);outline:none}
 .input:focus{border-color:var(--accent)}
 .btn{display:flex;align-items:center;justify-content:center;gap:10px;font-size:1.2rem;font-weight:600;padding:17px 20px;border-radius:14px;background:var(--ink);color:var(--bg);width:100%}

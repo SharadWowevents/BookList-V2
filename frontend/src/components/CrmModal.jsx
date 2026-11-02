@@ -441,7 +441,7 @@ export const CrmModal = () => {
 
               <div className="mgrid">
                 <div className="field">
-                  <label htmlFor="mName">Member name</label>
+                  <label htmlFor="mName">Member name <span className="req-star" aria-hidden="true">*</span></label>
                   <input
                     className="input"
                     id="mName"
@@ -507,7 +507,7 @@ export const CrmModal = () => {
                   />
                 </div>
                 <div className="field full">
-                  <label htmlFor="mPlan">Plan type</label>
+                  <label htmlFor="mPlan">Plan type <span className="req-star" aria-hidden="true">*</span></label>
                   <select
                     className="input"
                     id="mPlan"
@@ -664,7 +664,7 @@ export const CrmModal = () => {
                 <div className="sess-row">
                   <div className="field">
                     <label htmlFor="sDate">
-                      Session date <span className="dow">{dayName(sessDate)}</span>
+                      Session date <span className="req-star" aria-hidden="true">*</span> <span className="dow">{dayName(sessDate)}</span>
                     </label>
                     <input
                       className="input"
@@ -675,7 +675,7 @@ export const CrmModal = () => {
                     />
                   </div>
                   <div className="field">
-                    <label htmlFor="sType">Type</label>
+                    <label htmlFor="sType">Type <span className="req-star" aria-hidden="true">*</span></label>
                     <select
                       className="input"
                       id="sType"
@@ -689,7 +689,7 @@ export const CrmModal = () => {
                   </div>
                 </div>
                 <div className="field">
-                  <label htmlFor="sText">Notes / MoM</label>
+                  <label htmlFor="sText">Notes / MoM <span className="req-star" aria-hidden="true">*</span></label>
                   <div className="sess-text-wrap">
                     <textarea
                       className="input"

@@ -556,7 +556,7 @@ export const AdminPanel = () => {
                 <div className="card-title">Add a person</div>
                 <form onSubmit={handleCreateUser} className="adm-form" autoComplete="off">
                   <div className="field">
-                    <label htmlFor="admName">Full name</label>
+                    <label htmlFor="admName">Full name <span className="req-star" aria-hidden="true">*</span></label>
                     <input
                       className="input"
                       id="admName"
@@ -569,7 +569,7 @@ export const AdminPanel = () => {
                   </div>
 
                   <div className="field">
-                    <label htmlFor="admUser">Username</label>
+                    <label htmlFor="admUser">Username <span className="req-star" aria-hidden="true">*</span></label>
                     <input
                       className="input"
                       id="admUser"
@@ -584,7 +584,7 @@ export const AdminPanel = () => {
                   </div>
 
                   <div className="field">
-                    <label htmlFor="admPw">Password</label>
+                    <label htmlFor="admPw">Password <span className="req-star" aria-hidden="true">*</span></label>
                     <div className="pw-wrap">
                       <input
                         className="input mono"
@@ -695,7 +695,7 @@ export const AdminPanel = () => {
 
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
                             <div className="field" style={{ margin: 0 }}>
-                              <label style={{ fontSize: '0.82rem', color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Full display name</label>
+                              <label style={{ fontSize: '0.82rem', color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Full display name <span className="req-star" aria-hidden="true">*</span></label>
                               <input
                                 className="input"
                                 maxLength={60}
