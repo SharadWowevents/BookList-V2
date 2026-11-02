@@ -196,10 +196,13 @@ export const CrmModal = () => {
       return;
     }
 
-    const digits = (draft.mobile || '').replace(/\D/g, '');
-    if (draft.mobile && (digits.length < 7 || digits.length > 15)) {
-      setError('Enter a valid mobile number, for example 98100 12345.');
-      return;
+    const rawMobile = (draft.mobile || '').trim();
+    if (rawMobile) {
+      const digits = rawMobile.replace(/\D/g, '');
+      if (digits.length < 7 || digits.length > 15) {
+        setError('Enter a valid mobile number, for example 98100 12345.');
+        return;
+      }
     }
 
     const rawEmail = (draft.email || '').trim();
@@ -238,6 +241,7 @@ export const CrmModal = () => {
 
     const payload = {
       ...draft,
+      mobile: rawMobile,
       email: rawEmail,
       linkedin: rawLinkedIn ? (normLinkedIn(rawLinkedIn) || rawLinkedIn) : '',
       followUps: nextFollowUps
@@ -459,7 +463,6 @@ export const CrmModal = () => {
                     maxLength={20}
                     inputMode="tel"
                     placeholder="e.g. 98100 12345"
-                    required
                   />
                 </div>
                 <div className="field full">
