@@ -60,13 +60,13 @@ export const ListView = () => {
 
   const updateListTodos = useCallback((newTodos, immediate = false) => {
     if (!activeList || ro) return;
-    updateBoard({
-      lists: board.lists.map(l => l.id === activeList.id ? { ...l, todos: newTodos } : l)
-    }, immediate);
+    updateBoard(prev => ({
+      lists: prev.lists.map(l => l.id === activeList.id ? { ...l, todos: newTodos } : l)
+    }), immediate);
     if (shareSid && canEdit) {
       sharesAPI.updateShare(shareSid, { content: { name: activeList.name, todos: newTodos } }).catch(() => {});
     }
-  }, [activeList, ro, updateBoard, board.lists, shareSid, canEdit]);
+  }, [activeList, ro, updateBoard, shareSid, canEdit]);
 
   // Drag and drop todos with SortableJS
   const sOpenGroupRef = useRef(null);
@@ -497,14 +497,20 @@ export const ListView = () => {
 
     showUndoToast('Todo deleted.', () => {
       // Undo restoration
-      const current = board.lists.find(l => l.id === activeList.id);
-      if (current) {
-        const restored = [...current.todos];
+      updateBoard(prev => {
+        const curList = prev.lists.find(l => l.id === activeList.id);
+        if (!curList) return {};
+        // Deduplication: prevent adding a duplicate if already present
+        if (curList.todos.some(t => t.id === removed.id)) return {};
+        const restored = [...curList.todos];
         restored.splice(Math.min(idx, restored.length), 0, removed);
-        updateBoard({
-          lists: board.lists.map(l => l.id === activeList.id ? { ...l, todos: restored } : l)
-        });
-      }
+        if (shareSid && canEdit) {
+          sharesAPI.updateShare(shareSid, { content: { name: curList.name, todos: restored } }).catch(() => {});
+        }
+        return {
+          lists: prev.lists.map(l => l.id === activeList.id ? { ...l, todos: restored } : l)
+        };
+      }, true);
     });
   };
 
@@ -622,28 +628,39 @@ export const ListView = () => {
     // Add to target list
     const newTargetTodos = [...targetList.todos, todoToMove];
 
-    updateBoard({
-      lists: board.lists.map(l => {
-        if (l.id === activeList.id) return { ...l, todos: newActiveTodos };
-        if (l.id === targetListId) return { ...l, todos: newTargetTodos };
-        return l;
-      })
+    updateBoard(prev => {
+      const curActive = prev.lists.find(l => l.id === activeList.id);
+      const curTarget = prev.lists.find(l => l.id === targetListId);
+      if (!curActive || !curTarget) return {};
+      return {
+        lists: prev.lists.map(l => {
+          if (l.id === activeList.id) return { ...l, todos: l.todos.filter(t => t.id !== draggedTodoId) };
+          if (l.id === targetListId) return { ...l, todos: [...l.todos, todoToMove] };
+          return l;
+        })
+      };
     });
 
     setDraggedTodoId(null);
     showUndoToast(`Moved to “${targetList.name}”.`, () => {
       // Undo move
-      const curSource = board.lists.find(l => l.id === activeList.id);
-      const curTarget = board.lists.find(l => l.id === targetListId);
-      if (curSource && curTarget) {
-        updateBoard({
-          lists: board.lists.map(l => {
-            if (l.id === activeList.id) return { ...l, todos: [...l.todos, todoToMove] };
-            if (l.id === targetListId) return { ...l, todos: l.todos.filter(t => t.id !== todoToMove.id) };
+      updateBoard(prev => {
+        const curSource = prev.lists.find(l => l.id === activeList.id);
+        const curTarget = prev.lists.find(l => l.id === targetListId);
+        if (!curSource || !curTarget) return {};
+        return {
+          lists: prev.lists.map(l => {
+            if (l.id === activeList.id) {
+              const alreadyHas = l.todos.some(t => t.id === todoToMove.id);
+              return alreadyHas ? l : { ...l, todos: [...l.todos, todoToMove] };
+            }
+            if (l.id === targetListId) {
+              return { ...l, todos: l.todos.filter(t => t.id !== todoToMove.id) };
+            }
             return l;
           })
-        });
-      }
+        };
+      }, true);
     });
   };
 

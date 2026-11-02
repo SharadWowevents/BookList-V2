@@ -39,7 +39,18 @@ const normalizeBoard = (b) => {
   const res = { ...b };
   if (!Array.isArray(res.lists)) res.lists = [];
   if (!Array.isArray(res.notes)) res.notes = [];
-  res.lists = res.lists.filter(l => l && l.id && Array.isArray(l.todos));
+  res.lists = res.lists.filter(l => l && l.id && Array.isArray(l.todos)).map(l => {
+    const seenIds = new Set();
+    const cleanTodos = l.todos.filter(t => t && typeof t === 'object').map(t => {
+      let tId = t.id || uid();
+      if (seenIds.has(tId)) {
+        tId = uid();
+      }
+      seenIds.add(tId);
+      return { ...t, id: tId };
+    });
+    return { ...l, todos: cleanTodos };
+  });
   res.notes = res.notes.filter(n => n && n.id);
   if (res.tab === 'note' || res.tab === 'notes') {
     res.tab = 'notes';
@@ -516,8 +527,9 @@ export const AppProvider = ({ children }) => {
 
   const triggerUndo = useCallback(() => {
     if (toast.undoFn) {
-      toast.undoFn();
+      const fn = toast.undoFn;
       setToast({ visible: false, message: '', undoFn: null });
+      fn();
     }
   }, [toast]);
 
@@ -709,7 +721,9 @@ export const AppProvider = ({ children }) => {
 
   const updateBoard = useCallback((updates, immediate = false) => {
     setBoardState(prev => {
-      const next = normalizeBoard({ ...prev, ...updates, updatedAt: Date.now() });
+      const resolved = typeof updates === 'function' ? updates(prev) : updates;
+      if (!resolved || typeof resolved !== 'object') return prev;
+      const next = normalizeBoard({ ...prev, ...resolved, updatedAt: Date.now() });
       if (session) {
         const key = `listbook:board:${session.username || session.key || 'default'}`;
         try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
