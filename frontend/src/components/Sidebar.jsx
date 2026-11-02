@@ -68,7 +68,8 @@ export const Sidebar = () => {
 
   const toggleStar = (e, item, kind) => {
     e.stopPropagation();
-    const listKey = kind === 'list' ? 'lists' : 'notes';
+    const isList = kind === 'list' || kind === 'lists';
+    const listKey = isList ? 'lists' : 'notes';
     updateBoard({
       [listKey]: board[listKey].map(x => x.id === item.id ? { ...x, starred: !x.starred } : x)
     });
@@ -245,7 +246,7 @@ export const Sidebar = () => {
         )}
         {items.length === 0 && (
           <p className="side-empty">
-            {kind === 'list'
+            {isList
               ? 'No lists yet. Tap the new-list icon above.'
               : 'No notes yet. Tap the new-note icon above to write your first one.'}
           </p>
