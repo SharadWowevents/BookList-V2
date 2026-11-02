@@ -42,7 +42,7 @@ const formatFullDate = (date) => {
 };
 
 export const AdminPanel = () => {
-  const { setUi, showToast, session, board, navigate } = useApp();
+  const { setUi, showToast, session, board, navigate, reloadBoard, saveNoteBody, loadCrmMembers } = useApp();
 
   useEffect(() => {
     if (session?.role !== 'admin') {
@@ -370,6 +370,20 @@ export const AdminPanel = () => {
       setConfirmUndoId(null);
       // Mark as undone in local view
       setLogs(prev => prev.map(l => l.id === log.id ? { ...l, isUndone: true, undoneBy: session?.username || 'admin' } : l));
+
+      // If it was a deleted note, restore its content into cache & localStorage immediately
+      if (log.action === 'delete_note' && log.targetId) {
+        const restoredHtml = log.previousState?.html || '';
+        saveNoteBody(log.targetId, restoredHtml);
+      }
+
+      // Reload board so restored list/note immediately appears in sidebar & state without refresh
+      await reloadBoard();
+
+      if (log.category === 'crm') {
+        loadCrmMembers();
+      }
+
       // Refresh logs list
       setTimeout(() => loadLogs(), 800);
     } catch (err) {

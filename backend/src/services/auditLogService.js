@@ -113,8 +113,13 @@ export const undoLogEntry = async (logId, adminUser) => {
         // Reverse: restore the deleted list from previousState
         if (previousState) {
           const listDoc = { ...previousState };
-          delete listDoc._id; // Ensure clean insert
-          await List.create(listDoc);
+          delete listDoc._id;
+          delete listDoc.__v;
+          await List.findOneAndUpdate(
+            { userId: listDoc.userId, id: listDoc.id },
+            listDoc,
+            { upsert: true, new: true }
+          );
         }
         break;
       }
@@ -142,7 +147,12 @@ export const undoLogEntry = async (logId, adminUser) => {
         if (previousState) {
           const noteDoc = { ...previousState };
           delete noteDoc._id;
-          await Note.create(noteDoc);
+          delete noteDoc.__v;
+          await Note.findOneAndUpdate(
+            { userId: noteDoc.userId, id: noteDoc.id },
+            noteDoc,
+            { upsert: true, new: true }
+          );
         }
         break;
       }
@@ -170,7 +180,12 @@ export const undoLogEntry = async (logId, adminUser) => {
         if (previousState) {
           const memberDoc = { ...previousState };
           delete memberDoc._id;
-          await CrmMember.create(memberDoc);
+          delete memberDoc.__v;
+          await CrmMember.findOneAndUpdate(
+            { id: memberDoc.id },
+            memberDoc,
+            { upsert: true, new: true }
+          );
         }
         break;
       }

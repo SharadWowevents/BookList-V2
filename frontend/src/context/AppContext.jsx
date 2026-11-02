@@ -625,6 +625,7 @@ export const AppProvider = ({ children }) => {
 
   // Notes cache management
   const noteCacheRef = useRef({});
+  const noteLoadingRef = useRef(new Set());
   const getNoteKey = useCallback((noteId) => {
     return session ? `listbook:note:${session.username || session.key}:${noteId}` : `listbook:note:anon:${noteId}`;
   }, [session]);
@@ -641,18 +642,26 @@ export const AppProvider = ({ children }) => {
       }
     } catch {}
 
-    const init = { html: '', updatedAt: 0 };
+    const init = { html: '', updatedAt: 0, loading: true };
     noteCacheRef.current[noteId] = init;
 
     // Background fetch from MongoDB if authenticated
-    if (getToken()) {
+    if (getToken() && !noteLoadingRef.current.has(noteId)) {
+      noteLoadingRef.current.add(noteId);
       notesAPI.getNote(noteId).then(remoteNote => {
-        if (remoteNote && remoteNote.html) {
-          const rec = { html: remoteNote.html, updatedAt: new Date(remoteNote.updatedAt).getTime() };
+        noteLoadingRef.current.delete(noteId);
+        if (remoteNote && remoteNote.html !== undefined) {
+          const rec = { html: remoteNote.html, updatedAt: new Date(remoteNote.updatedAt || Date.now()).getTime() };
           noteCacheRef.current[noteId] = rec;
           try { localStorage.setItem(getNoteKey(noteId), JSON.stringify(rec)); } catch {}
+          window.dispatchEvent(new CustomEvent('listbook:note-loaded', {
+            detail: { noteId, html: remoteNote.html }
+          }));
         }
-      }).catch(() => {});
+      }).catch((err) => {
+        noteLoadingRef.current.delete(noteId);
+        console.error('getNote error:', err);
+      });
     }
 
     return init;
@@ -667,6 +676,10 @@ export const AppProvider = ({ children }) => {
 
   const saveNoteBody = useCallback((noteId, html) => {
     if (!noteId) return;
+    // Don't overwrite remote note content if note is still loading from server and incoming html is empty
+    if (noteLoadingRef.current.has(noteId) && (!html || html === '<p><br></p>' || html === '<br>')) {
+      return;
+    }
     const rec = { html, updatedAt: Date.now() };
     noteCacheRef.current[noteId] = rec;
     try {
@@ -744,6 +757,28 @@ export const AppProvider = ({ children }) => {
       return next;
     });
   }, [session, syncBoardToBackendNow]);
+
+  const reloadBoard = useCallback(async () => {
+    if (!getToken()) return null;
+    clearTimeout(boardSyncTimer.current);
+    boardSyncTimer.current = null;
+    pendingBoardSyncRef.current = null;
+    try {
+      const remoteBoard = await boardAPI.getBoard();
+      if (remoteBoard && Array.isArray(remoteBoard.lists)) {
+        const normalized = normalizeBoard(remoteBoard);
+        setBoardState(normalized);
+        if (session) {
+          const key = `listbook:board:${session.username || session.key || 'default'}`;
+          try { localStorage.setItem(key, JSON.stringify(normalized)); } catch {}
+        }
+        return normalized;
+      }
+    } catch (err) {
+      console.error('reloadBoard error:', err);
+    }
+    return null;
+  }, [session]);
 
   // Flush any pending board sync immediately before page unloads or hides
   useEffect(() => {
@@ -1259,6 +1294,7 @@ export const AppProvider = ({ children }) => {
       signOut,
       board,
       updateBoard,
+      reloadBoard,
       ui,
       setUi,
       accent,

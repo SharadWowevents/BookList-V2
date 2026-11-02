@@ -593,6 +593,8 @@ export const ListView = () => {
 
   // Delete list
   const handleDeleteList = () => {
+    const listId = activeList.id;
+    const listObj = { ...activeList };
     const listName = activeList.name;
     const isSharedNonOwner = isShared && !isOwn;
 
@@ -601,17 +603,31 @@ export const ListView = () => {
     }
 
     if (isOwn) {
-      boardAPI.deleteList(activeList.id).catch(() => {});
+      boardAPI.deleteList(listId).catch(() => {});
     }
 
-    const remaining = board.lists.filter(l => l.id !== activeList.id);
+    const remaining = board.lists.filter(l => l.id !== listId);
     const nextActive = remaining[0] ? remaining[0].id : null;
     updateBoard({
       lists: remaining,
       activeId: nextActive
     });
     setUi(prev => ({ ...prev, confirm: false, viewing: false }));
-    showToast(isSharedNonOwner ? 'Removed from your lists.' : `List “${listName}” deleted.`);
+
+    if (isSharedNonOwner) {
+      showToast('Removed from your lists.');
+    } else {
+      showUndoToast(`List “${listName}” deleted.`, () => {
+        updateBoard(prev => {
+          if (prev.lists.some(l => l.id === listId)) return {};
+          return {
+            lists: [listObj, ...prev.lists],
+            activeId: listId,
+            tab: 'lists'
+          };
+        }, true);
+      });
+    }
   };
 
   // Move todo to another list

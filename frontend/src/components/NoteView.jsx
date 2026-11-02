@@ -67,7 +67,7 @@ const HILITES = [
 export const NoteView = () => {
   const {
     board, updateBoard, ui, setUi, session, photo,
-    loadNoteBody, saveNoteBody, deleteNoteBody, showToast, accent
+    loadNoteBody, saveNoteBody, deleteNoteBody, showToast, showUndoToast, accent
   } = useApp();
 
   const editorRef = useRef(null);
@@ -571,7 +571,11 @@ export const NoteView = () => {
 
   // Load active note body ONLY when switching to a different note
   useEffect(() => {
-    if (!activeNoteId || !editorRef.current) return;
+    if (!activeNoteId) {
+      loadedNoteIdRef.current = null;
+      return;
+    }
+    if (!editorRef.current) return;
     if (loadedNoteIdRef.current === activeNoteId) return;
     loadedNoteIdRef.current = activeNoteId;
 
@@ -586,6 +590,33 @@ export const NoteView = () => {
       !editorRef.current.querySelector('li,hr,blockquote,pre,h1,h2,h3,img,div.ink');
     editorRef.current.classList.toggle('is-empty', isEmpty);
   }, [activeNoteId, loadNoteBody, hydrateInk]);
+
+  // Listen for asynchronous note body arrivals from server (e.g. after restore/undo or fresh visit)
+  useEffect(() => {
+    const handleNoteLoaded = (e) => {
+      const { noteId, html } = e.detail || {};
+      if (noteId !== activeNoteId || !editorRef.current) return;
+      if (isInkActive) return;
+
+      const currentHtml = getEditorHTML();
+      const isCurrentEmpty = !currentHtml || currentHtml === '<p><br></p>' || currentHtml === '<br>' || !editorRef.current.textContent.trim();
+
+      if (isCurrentEmpty && html) {
+        editorRef.current.innerHTML = html;
+        hydrateInk(editorRef.current);
+
+        const words = (editorRef.current.innerText.match(/\S+/g) || []).length;
+        setWordCount(words);
+
+        const isEmpty = !editorRef.current.textContent.trim() &&
+          !editorRef.current.querySelector('li,hr,blockquote,pre,h1,h2,h3,img,div.ink');
+        editorRef.current.classList.toggle('is-empty', isEmpty);
+      }
+    };
+
+    window.addEventListener('listbook:note-loaded', handleNoteLoaded);
+    return () => window.removeEventListener('listbook:note-loaded', handleNoteLoaded);
+  }, [activeNoteId, isInkActive, getEditorHTML, hydrateInk]);
 
   // Listen for live remote updates from collaborators on this shared note
   useEffect(() => {
@@ -874,25 +905,46 @@ export const NoteView = () => {
 
   // Delete note
   const handleDeleteNote = () => {
+    const noteId = activeNote.id;
+    const noteObj = { ...activeNote };
     const title = activeNote.title || 'Untitled note';
     const isSharedNonOwner = isShared && !isOwn;
+    const noteHtml = loadNoteBody(noteId)?.html || getEditorHTML() || '';
 
     if (shareSid && isOwn) {
       sharesAPI.deleteShare(shareSid).catch(() => {});
     }
 
     if (!isSharedNonOwner) {
-      deleteNoteBody(activeNote.id);
+      deleteNoteBody(noteId);
     }
 
-    const remaining = board.notes.filter(n => n.id !== activeNote.id);
+    loadedNoteIdRef.current = null;
+
+    const remaining = board.notes.filter(n => n.id !== noteId);
     const nextActive = remaining[0] ? remaining[0].id : null;
     updateBoard({
       notes: remaining,
       activeNoteId: nextActive
     });
     setUi(prev => ({ ...prev, confirm: false, viewing: false }));
-    showToast(isSharedNonOwner ? 'Removed from your notes.' : `Note “${title}” deleted.`);
+
+    if (isSharedNonOwner) {
+      showToast('Removed from your notes.');
+    } else {
+      showUndoToast(`Note “${title}” deleted.`, () => {
+        saveNoteBody(noteId, noteHtml);
+        loadedNoteIdRef.current = null;
+        updateBoard(prev => {
+          if (prev.notes.some(n => n.id === noteId)) return {};
+          return {
+            notes: [noteObj, ...prev.notes],
+            activeNoteId: noteId,
+            tab: 'notes'
+          };
+        }, true);
+      });
+    }
   };
 
   // Publish note as standalone web page
