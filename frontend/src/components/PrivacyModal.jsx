@@ -164,7 +164,6 @@ export const PrivacyModal = () => {
               <div><strong>Service:</strong> MyDeepwork (by WowEvents)</div>
               <div><strong>Domain:</strong> <a href="https://mydeepwork.in" target="_blank" rel="noopener noreferrer">mydeepwork.in</a></div>
               <div><strong>Grievance Officer:</strong> Data Protection Administrator</div>
-              <div><strong>Email:</strong> admin@mydeepwork.in</div>
             </div>
           </div>
         </div>
@@ -209,3 +208,4 @@ export const PrivacyModal = () => {
     </div>
   );
 };
+
