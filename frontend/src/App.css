@@ -125,9 +125,10 @@ svg{display:block}
 .new-list{display:flex;gap:8px}
 .new-list .input{font-size:1.15rem;padding:12px 14px}
 .lists{flex:1;overflow-y:auto;padding-block:10px 24px;padding-left:max(10px,env(safe-area-inset-left,0px));padding-right:10px;display:flex;flex-direction:column;gap:2px}
-.sec-label{font-size:.75rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:14px 12px 6px}
-.group{display:flex;flex-direction:column;gap:2px;min-height:4px}
-.list-row{display:flex;align-items:center;gap:6px;border-radius:14px;padding:4px 6px 4px 4px;user-select:none;-webkit-user-select:none}
+.lists > *{flex-shrink:0}
+.sec-label{font-size:.75rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:14px 12px 6px;flex-shrink:0}
+.group{display:flex;flex-direction:column;gap:2px;min-height:4px;flex-shrink:0}
+.list-row{display:flex;align-items:center;gap:6px;border-radius:14px;padding:4px 6px 4px 4px;user-select:none;-webkit-user-select:none;flex-shrink:0}
 .list-row:hover{background:var(--soft)}
 .list-row.active{background:var(--soft)}
 .list-row.active .list-name{font-weight:600}
@@ -162,7 +163,8 @@ svg{display:block}
 .pill.ink{background:var(--ink);color:var(--bg)}
 .todos{flex:1;overflow-y:auto;padding-block:6px 24px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
 .todo-inner{max-width:860px;display:flex;flex-direction:column;gap:2px}
-.todo{display:flex;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:6px 6px 6px 2px;margin-bottom:8px;user-select:none;-webkit-user-select:none}
+.todo-inner > *{flex-shrink:0}
+.todo{display:flex;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:6px 6px 6px 2px;margin-bottom:8px;user-select:none;-webkit-user-select:none;flex-shrink:0}
 .check{width:44px;height:44px;display:grid;place-items:center;flex:none}
 .box{width:28px;height:28px;border-radius:9px;border:2px solid var(--line);display:grid;place-items:center;transition:background .15s,border-color .15s}
 .check:hover .box{border-color:var(--accent)}

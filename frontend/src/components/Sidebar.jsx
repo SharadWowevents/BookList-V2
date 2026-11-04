@@ -183,13 +183,14 @@ export const Sidebar = () => {
     const others = items.filter(x => !x.starred);
     const isList = kind === 'list' || kind === 'lists';
 
-    const ItemRow = ({ item }) => {
+    const renderItemRow = (item) => {
       const isActive = isList ? board.activeId === item.id : board.activeNoteId === item.id;
       const openCount = isList ? item.todos.filter(t => !t.done).length : 0;
       const label = isList ? item.name : (item.title || 'Untitled note');
 
       return (
         <div
+          key={item.id}
           className={`list-row ${isActive ? 'active' : ''}`}
           data-id={item.id}
           onClick={() => {
@@ -233,7 +234,7 @@ export const Sidebar = () => {
         {starred.length > 0 && <div className="sec-label">Starred</div>}
         {starred.length > 0 && (
           <div className="group" ref={starredGroupRef}>
-            {starred.map(item => <ItemRow key={item.id} item={item} />)}
+            {starred.map(item => renderItemRow(item))}
           </div>
         )}
         {starred.length > 0 && others.length > 0 && (
@@ -241,7 +242,7 @@ export const Sidebar = () => {
         )}
         {others.length > 0 && (
           <div className="group" ref={othersGroupRef}>
-            {others.map(item => <ItemRow key={item.id} item={item} />)}
+            {others.map(item => renderItemRow(item))}
           </div>
         )}
         {items.length === 0 && (
