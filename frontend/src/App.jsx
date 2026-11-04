@@ -9,6 +9,7 @@ import { JournalView } from './components/JournalView';
 import { AdminPanel } from './components/AdminPanel';
 import { Login } from './components/Login';
 import { PublicNoteView } from './components/PublicNoteView';
+import { PrivacyModal } from './components/PrivacyModal';
 import './App.css';
 
 const Shell = () => {
@@ -59,7 +60,12 @@ const Shell = () => {
       const redirectTarget = window.location.pathname + window.location.search;
       navigate(`/login?redirect=${encodeURIComponent(redirectTarget)}`, { replace: true });
     }
-    return <Login />;
+    return (
+      <>
+        <Login />
+        <PrivacyModal />
+      </>
+    );
   }
 
   // 4. If logged in and on /login, redirect to redirect target or active workspace tab
@@ -104,6 +110,7 @@ const Shell = () => {
         )}
       </main>
       <CrmModal />
+      <PrivacyModal />
       {toast.visible && (
         <div id="toast" className="toast">
           {toast.message}

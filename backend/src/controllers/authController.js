@@ -123,7 +123,8 @@ export const pinLogin = async (req, res) => {
         prefs: user.prefs,
         activeId: user.activeId,
         activeNoteId: user.activeNoteId,
-        tab: user.tab
+        tab: user.tab,
+        privacyPolicyAcceptedAt: user.privacyPolicyAcceptedAt || null
       }
     });
   } catch (err) {
@@ -179,7 +180,8 @@ export const teamLogin = async (req, res) => {
         prefs: user.prefs,
         activeId: user.activeId,
         activeNoteId: user.activeNoteId,
-        tab: user.tab
+        tab: user.tab,
+        privacyPolicyAcceptedAt: user.privacyPolicyAcceptedAt || null
       }
     });
   } catch (err) {
@@ -200,9 +202,31 @@ export const getMe = async (req, res) => {
       prefs: req.user.prefs,
       activeId: req.user.activeId,
       activeNoteId: req.user.activeNoteId,
-      tab: req.user.tab
+      tab: req.user.tab,
+      privacyPolicyAcceptedAt: req.user.privacyPolicyAcceptedAt || null
     }
   });
+};
+
+export const acceptPrivacyPolicy = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    user.privacyPolicyAcceptedAt = new Date();
+    user.privacyPolicyVersion = req.body?.version || '2023-dpdp-v1';
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Privacy policy accepted.',
+      privacyPolicyAcceptedAt: user.privacyPolicyAcceptedAt,
+      privacyPolicyVersion: user.privacyPolicyVersion
+    });
+  } catch (err) {
+    console.error('acceptPrivacyPolicy error:', err);
+    res.status(500).json({ message: 'Error saving privacy policy acceptance.' });
+  }
 };
 
 export const updateProfile = async (req, res) => {
@@ -232,7 +256,8 @@ export const updateProfile = async (req, res) => {
         prefs: user.prefs,
         activeId: user.activeId,
         activeNoteId: user.activeNoteId,
-        tab: user.tab
+        tab: user.tab,
+        privacyPolicyAcceptedAt: user.privacyPolicyAcceptedAt || null
       }
     });
   } catch (err) {

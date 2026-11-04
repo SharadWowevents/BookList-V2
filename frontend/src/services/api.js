@@ -59,6 +59,10 @@ export const authAPI = {
   updateProfile: (profileData) => request('/auth/profile', {
     method: 'PUT',
     body: JSON.stringify(profileData)
+  }),
+  acceptPrivacyPolicy: (version = '2023-dpdp-v1') => request('/auth/accept-privacy', {
+    method: 'POST',
+    body: JSON.stringify({ version })
   })
 };
 

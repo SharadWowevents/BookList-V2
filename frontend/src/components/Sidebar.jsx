@@ -17,7 +17,7 @@ export const Sidebar = () => {
     showToast,
     crmMembers, crmFilter, setCrmFilter, isCrmAllowed,
     journalYears, journalViewMode, setJournalViewMode, setJournalCenter, setJournalMonth,
-    navigate
+    navigate, openPrivacyPolicy
   } = useApp();
 
   const isAdmin = session?.role === 'admin';
@@ -350,6 +350,16 @@ export const Sidebar = () => {
           <ShieldIcon /> Admin · People
         </button>
       )}
+      <button
+        type="button"
+        className="menu-item"
+        onClick={() => {
+          setUi(prev => ({ ...prev, menu: false }));
+          openPrivacyPolicy('view');
+        }}
+      >
+        <ShieldIcon /> Privacy Policy (DPDP)
+      </button>
       <button
         type="button"
         className="menu-item"

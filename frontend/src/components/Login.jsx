@@ -15,7 +15,7 @@ async function sha256(str) {
 }
 
 export const Login = () => {
-  const { setSession, showToast, pendingShareSid, navigate } = useApp();
+  const { setSession, showToast, pendingShareSid, navigate, openPrivacyPolicy } = useApp();
 
   const handlePostLoginNavigation = (user) => {
     const params = new URLSearchParams(window.location.search);
@@ -268,6 +268,17 @@ export const Login = () => {
             )}
           </form>
         )}
+
+        <div style={{ textAlign: 'center', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--line)' }}>
+          <button
+            type="button"
+            className="link"
+            style={{ fontSize: '.84rem', color: 'var(--muted)', textDecoration: 'none' }}
+            onClick={() => openPrivacyPolicy('view')}
+          >
+            Privacy Policy · DPDP Act 2023
+          </button>
+        </div>
       </div>
     </div>
   );

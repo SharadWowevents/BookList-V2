@@ -66,6 +66,14 @@ const userSchema = new mongoose.Schema({
   lastSeen: {
     type: Date,
     default: Date.now
+  },
+  privacyPolicyAcceptedAt: {
+    type: Date,
+    default: null
+  },
+  privacyPolicyVersion: {
+    type: String,
+    default: null
   }
 }, {
   timestamps: true

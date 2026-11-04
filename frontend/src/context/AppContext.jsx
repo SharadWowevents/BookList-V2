@@ -230,6 +230,62 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   // ----------------------------------------------------
+  // PRIVACY POLICY (DPDP Act 2023)
+  // ----------------------------------------------------
+  const [privacyModal, setPrivacyModal] = useState({ open: false, mode: 'view' });
+
+  // If user is logged in and has not agreed, automatically show consent modal
+  useEffect(() => {
+    if (session) {
+      const userKey = session.username || session.key || session.id || 'user';
+      let localAccepted = false;
+      try {
+        localAccepted = localStorage.getItem(`listbook:privacy_accepted:${userKey}`) === 'true';
+      } catch {}
+      const backendAccepted = Boolean(session.privacyPolicyAcceptedAt);
+      if (!localAccepted && !backendAccepted) {
+        setPrivacyModal({ open: true, mode: 'consent' });
+      }
+    }
+  }, [session?.username, session?.key, session?.id, session?.privacyPolicyAcceptedAt]);
+
+  const openPrivacyPolicy = useCallback((mode = 'view') => {
+    setPrivacyModal({ open: true, mode });
+  }, []);
+
+  const closePrivacyPolicy = useCallback(() => {
+    setPrivacyModal(prev => prev.mode === 'consent' ? prev : { ...prev, open: false });
+  }, []);
+
+  const acceptPrivacyPolicy = useCallback(async () => {
+    const acceptedAt = new Date().toISOString();
+    const userKey = session ? (session.username || session.key || session.id || 'user') : 'user';
+    try {
+      localStorage.setItem(`listbook:privacy_accepted:${userKey}`, 'true');
+    } catch {}
+
+    setSessionState(prev => {
+      if (!prev) return prev;
+      const updated = { ...prev, privacyPolicyAcceptedAt: acceptedAt };
+      try {
+        localStorage.setItem('listbook:session', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    setPrivacyModal({ open: false, mode: 'view' });
+    showToast('Privacy policy accepted.');
+
+    if (getToken()) {
+      try {
+        await authAPI.acceptPrivacyPolicy('2023-dpdp-v1');
+      } catch (err) {
+        console.error('acceptPrivacyPolicy sync error:', err);
+      }
+    }
+  }, [session, showToast]);
+
+  // ----------------------------------------------------
   // CRM STATE & ACTIONS
   // ----------------------------------------------------
   const [crmMembers, setCrmMembers] = useState([]);
@@ -1346,7 +1402,11 @@ export const AppProvider = ({ children }) => {
       journalMonth,
       setJournalMonth,
       journalStatus,
-      setJournalStatus
+      setJournalStatus,
+      privacyModal,
+      openPrivacyPolicy,
+      closePrivacyPolicy,
+      acceptPrivacyPolicy
     }}>
       {children}
     </AppContext.Provider>
