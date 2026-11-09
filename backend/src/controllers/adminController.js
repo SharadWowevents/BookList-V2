@@ -14,6 +14,7 @@ import {
   updateBackupConfig
 } from '../services/backupService.js';
 import { recordLog, getLogs, undoLogEntry } from '../services/auditLogService.js';
+import { testSmtpConnection } from '../services/emailService.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -66,6 +67,7 @@ export const getUsers = async (req, res) => {
       users: users.map(u => ({
         u: u.username,
         name: u.name,
+        email: u.email || '',
         status: u.status,
         role: u.role,
         crm: !!u.crm,
@@ -83,7 +85,7 @@ export const getUsers = async (req, res) => {
 
 export const createUser = async (req, res) => {
   try {
-    const { name, username, password } = req.body;
+    const { name, username, password, email } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ message: 'Name is required.' });
@@ -94,6 +96,15 @@ export const createUser = async (req, res) => {
     }
     if (!password || password.length < 8) {
       return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+    }
+
+    let cleanEmail = null;
+    if (email && email.trim()) {
+      const em = email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+        return res.status(400).json({ message: 'Please enter a valid email address.' });
+      }
+      cleanEmail = em;
     }
 
     const existing = await User.findOne({ username: u });
@@ -107,6 +118,7 @@ export const createUser = async (req, res) => {
     const newUser = await User.create({
       username: u,
       name: name.trim(),
+      email: cleanEmail,
       authType: 'password',
       passwordHash,
       role: 'member',
@@ -156,6 +168,7 @@ export const createUser = async (req, res) => {
     res.status(201).json({
       u: newUser.username,
       name: newUser.name,
+      email: newUser.email || '',
       status: newUser.status,
       role: newUser.role,
       crm: !!newUser.crm,
@@ -306,7 +319,7 @@ export const deleteUser = async (req, res) => {
 export const renameUser = async (req, res) => {
   try {
     const { username } = req.params;
-    const { name, newUsername } = req.body;
+    const { name, newUsername, email } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ message: 'Name is required.' });
@@ -320,6 +333,14 @@ export const renameUser = async (req, res) => {
     const oldName = user.name;
     const oldUsername = user.username;
     user.name = trimmedName;
+
+    if (email !== undefined) {
+      const em = (email || '').trim().toLowerCase();
+      if (em && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+        return res.status(400).json({ message: 'Please enter a valid email address.' });
+      }
+      user.email = em || null;
+    }
 
     let usernameChanged = false;
 
@@ -362,6 +383,7 @@ export const renameUser = async (req, res) => {
       user: {
         u: user.username,
         name: user.name,
+        email: user.email || '',
         status: user.status,
         role: user.role,
         crm: !!user.crm,
@@ -493,3 +515,105 @@ export const undoLogController = async (req, res) => {
     res.status(err.status || 500).json({ message: err.message || 'Error performing undo.' });
   }
 };
+
+/* ============================================================
+   SMTP Configuration & Testing
+   ============================================================ */
+export const getSmtpConfigController = async (req, res) => {
+  try {
+    let config = await Config.findOne({ key: 'app' });
+    const dbSmtp = config?.smtpConfig || {};
+    const envHost = process.env.SMTP_HOST || '';
+    const envUser = process.env.SMTP_USER || '';
+
+    res.json({
+      host: dbSmtp.host || envHost,
+      port: Number(dbSmtp.port) || (process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587),
+      secure: dbSmtp.secure !== undefined ? Boolean(dbSmtp.secure) : (process.env.SMTP_SECURE === 'true'),
+      user: dbSmtp.user || envUser,
+      from: dbSmtp.from || process.env.SMTP_FROM || '',
+      hasPass: Boolean(dbSmtp.pass || process.env.SMTP_PASS),
+      isFromEnv: !dbSmtp.host && Boolean(envHost)
+    });
+  } catch (err) {
+    console.error('getSmtpConfig error:', err);
+    res.status(500).json({ message: 'Error retrieving SMTP configuration.' });
+  }
+};
+
+export const updateSmtpConfigController = async (req, res) => {
+  try {
+    const { host, port, secure, user, pass, from } = req.body;
+    let config = await Config.findOne({ key: 'app' });
+    if (!config) config = new Config({ key: 'app' });
+    if (!config.smtpConfig) config.smtpConfig = {};
+
+    if (host !== undefined) config.smtpConfig.host = (host || '').trim();
+    if (port !== undefined) config.smtpConfig.port = Number(port) || 587;
+    if (secure !== undefined) config.smtpConfig.secure = Boolean(secure);
+    if (user !== undefined) config.smtpConfig.user = (user || '').trim();
+    if (pass && pass.trim()) config.smtpConfig.pass = pass.trim();
+    if (from !== undefined) config.smtpConfig.from = (from || '').trim();
+
+    await config.save();
+
+    await recordLog({
+      action: 'update_smtp_config',
+      category: 'admin',
+      actor: req.user,
+      details: `Updated SMTP email configuration (Host: ${config.smtpConfig.host || 'none'}, User: ${config.smtpConfig.user || 'none'})`,
+      targetId: 'smtp',
+      targetType: 'config',
+      canUndo: false
+    });
+
+    res.json({
+      success: true,
+      message: 'SMTP configuration saved successfully.',
+      config: {
+        host: config.smtpConfig.host,
+        port: config.smtpConfig.port,
+        secure: config.smtpConfig.secure,
+        user: config.smtpConfig.user,
+        from: config.smtpConfig.from,
+        hasPass: Boolean(config.smtpConfig.pass)
+      }
+    });
+  } catch (err) {
+    console.error('updateSmtpConfig error:', err);
+    res.status(500).json({ message: 'Error updating SMTP configuration.' });
+  }
+};
+
+export const testSmtpController = async (req, res) => {
+  try {
+    const { host, port, secure, user, pass, from, testEmail } = req.body;
+    let targetConfig = null;
+
+    if (host && user) {
+      let testPass = pass;
+      if (!testPass) {
+        const config = await Config.findOne({ key: 'app' });
+        testPass = config?.smtpConfig?.pass || process.env.SMTP_PASS || '';
+      }
+      targetConfig = {
+        host: host.trim(),
+        port: Number(port) || 587,
+        secure: Boolean(secure),
+        user: user.trim(),
+        pass: testPass,
+        from: from ? from.trim() : `"MyDeepwork" <${user.trim()}>`
+      };
+    }
+
+    const result = await testSmtpConnection(targetConfig, testEmail || req.user.email);
+    res.json({
+      success: true,
+      message: result.message + (testEmail ? ` Test email was sent to ${testEmail}.` : '')
+    });
+  } catch (err) {
+    console.error('testSmtp error:', err);
+    res.status(400).json({ message: `SMTP verification failed: ${err.message}` });
+  }
+};
+

@@ -24,6 +24,14 @@ const configSchema = new mongoose.Schema({
       type: Date,
       default: null
     }
+  },
+  smtpConfig: {
+    host: { type: String, default: '' },
+    port: { type: Number, default: 587 },
+    secure: { type: Boolean, default: false },
+    user: { type: String, default: '' },
+    pass: { type: String, default: '' },
+    from: { type: String, default: '' }
   }
 }, {
   timestamps: true

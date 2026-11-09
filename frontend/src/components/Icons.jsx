@@ -544,5 +544,13 @@ export const ArchetypeIcon = ({ label, size = 24, className = '' }) => {
   );
 };
 
+export const MailIcon = ({ size = 20, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M3 7l9 6 9-6" />
+  </svg>
+);
+
+
 
 

@@ -4,7 +4,7 @@ import { adminAPI } from '../services/api';
 import {
   BackIcon, KeyIcon, PauseIcon, PlayIcon, TrashIcon, RefreshIcon,
   EyeIcon, CopyIcon, PencilIcon, XIcon, CrmIcon, UndoIcon,
-  DatabaseIcon, HistoryIcon, DownloadIcon, CheckIcon, SearchIcon, UsersIcon
+  DatabaseIcon, HistoryIcon, DownloadIcon, CheckIcon, SearchIcon, UsersIcon, MailIcon
 } from './Icons';
 
 const WORDS = "amber,atlas,bloom,cedar,coral,delta,ember,fable,grove,harbor,indigo,juniper,lotus,maple,meadow,nova,orbit,pebble,quartz,river,saffron,summit,tango,tidal,velvet,willow,zephyr,canyon,falcon,lagoon".split(",");
@@ -63,6 +63,7 @@ export const AdminPanel = () => {
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
+  const [userEmail, setUserEmail] = useState('');
   const [userTouched, setUserTouched] = useState(false);
   const [password, setPassword] = useState(genPassword);
   const [showPw, setShowPw] = useState(false);
@@ -76,6 +77,7 @@ export const AdminPanel = () => {
   const [editingUser, setEditingUser] = useState(null);
   const [editName, setEditName] = useState('');
   const [editUsername, setEditUsername] = useState('');
+  const [editEmail, setEditEmail] = useState('');
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -101,6 +103,24 @@ export const AdminPanel = () => {
   const [logCategory, setLogCategory] = useState('all');
   const [undoingId, setUndoingId] = useState(null);
   const [confirmUndoId, setConfirmUndoId] = useState(null);
+
+  // SMTP Settings Tab State
+  const [smtpConfig, setSmtpConfig] = useState({
+    host: '',
+    port: 587,
+    secure: false,
+    user: '',
+    pass: '',
+    from: '',
+    hasPass: false,
+    isFromEnv: false
+  });
+  const [showSmtpPass, setShowSmtpPass] = useState(false);
+  const [smtpSaving, setSmtpSaving] = useState(false);
+  const [smtpTesting, setSmtpTesting] = useState(false);
+  const [testEmail, setTestEmail] = useState('');
+  const [smtpStatusMsg, setSmtpStatusMsg] = useState('');
+  const [smtpStatusErr, setSmtpStatusErr] = useState('');
 
   // Initial load
   useEffect(() => {
@@ -134,6 +154,84 @@ export const AdminPanel = () => {
       loadBackupConfig();
     } else if (tab === 'logs') {
       loadLogs();
+    } else if (tab === 'smtp') {
+      loadSmtpConfig();
+    }
+  };
+
+  const loadSmtpConfig = async () => {
+    try {
+      const cfg = await adminAPI.getSmtpConfig();
+      if (cfg) {
+        setSmtpConfig(prev => ({
+          ...prev,
+          host: cfg.host || '',
+          port: cfg.port || 587,
+          secure: !!cfg.secure,
+          user: cfg.user || '',
+          pass: '',
+          from: cfg.from || '',
+          hasPass: !!cfg.hasPass,
+          isFromEnv: !!cfg.isFromEnv
+        }));
+      }
+    } catch {
+      showToast('Could not load SMTP configuration.');
+    }
+  };
+
+  const handleSaveSmtp = async (e) => {
+    e.preventDefault();
+    setSmtpSaving(true);
+    setSmtpStatusMsg('');
+    setSmtpStatusErr('');
+
+    try {
+      const payload = {
+        host: smtpConfig.host,
+        port: Number(smtpConfig.port) || 587,
+        secure: smtpConfig.secure,
+        user: smtpConfig.user,
+        from: smtpConfig.from
+      };
+      if (smtpConfig.pass && smtpConfig.pass.trim()) {
+        payload.pass = smtpConfig.pass.trim();
+      }
+
+      const res = await adminAPI.updateSmtpConfig(payload);
+      showToast(res.message || 'SMTP settings saved.');
+      setSmtpStatusMsg('SMTP configuration saved successfully.');
+      setSmtpConfig(prev => ({ ...prev, pass: '', hasPass: res.config?.hasPass }));
+    } catch (err) {
+      setSmtpStatusErr(err.message || 'Failed to save SMTP settings.');
+    } finally {
+      setSmtpSaving(false);
+    }
+  };
+
+  const handleTestSmtp = async (e) => {
+    e.preventDefault();
+    setSmtpTesting(true);
+    setSmtpStatusMsg('');
+    setSmtpStatusErr('');
+
+    try {
+      const payload = {
+        host: smtpConfig.host,
+        port: Number(smtpConfig.port) || 587,
+        secure: smtpConfig.secure,
+        user: smtpConfig.user,
+        pass: smtpConfig.pass,
+        from: smtpConfig.from,
+        testEmail: testEmail.trim() || session?.email || ''
+      };
+      const res = await adminAPI.testSmtp(payload);
+      setSmtpStatusMsg(res.message || 'SMTP test passed successfully!');
+      showToast('SMTP connection successful!');
+    } catch (err) {
+      setSmtpStatusErr(err.message || 'SMTP test failed.');
+    } finally {
+      setSmtpTesting(false);
     }
   };
 
@@ -204,11 +302,17 @@ export const AdminPanel = () => {
     setError('');
 
     try {
-      const newUser = await adminAPI.createUser({ name, username, password });
+      const newUser = await adminAPI.createUser({
+        name,
+        username,
+        password,
+        email: userEmail.trim() || undefined
+      });
       setTeamUsers(prev => [newUser, ...prev]);
       setCreds({ name: newUser.name, u: newUser.u, pw: password, reset: false });
       setName('');
       setUsername('');
+      setUserEmail('');
       setUserTouched(false);
       setPassword(genPassword());
       showToast(`Sign-in created for ${newUser.name}.`);
@@ -224,6 +328,7 @@ export const AdminPanel = () => {
     setEditingUser(u.u);
     setEditName(u.name || u.u);
     setEditUsername(u.u);
+    setEditEmail(u.email || '');
     setEditError('');
   };
 
@@ -231,6 +336,7 @@ export const AdminPanel = () => {
     setEditingUser(null);
     setEditName('');
     setEditUsername('');
+    setEditEmail('');
     setEditError('');
   };
 
@@ -242,7 +348,8 @@ export const AdminPanel = () => {
     try {
       const res = await adminAPI.renameUser(u.u, {
         name: editName.trim(),
-        newUsername: editUsername.trim()
+        newUsername: editUsername.trim(),
+        email: editEmail.trim()
       });
 
       setTeamUsers(prev => prev.map(item => item.u === u.u ? { ...item, ...res.user } : item));
@@ -455,11 +562,13 @@ export const AdminPanel = () => {
             {activeTab === 'people' && 'People & Access'}
             {activeTab === 'backups' && 'Backups'}
             {activeTab === 'logs' && 'Activity Logs'}
+            {activeTab === 'smtp' && 'SMTP Email & OTP'}
           </div>
           <div className="sub">
             {activeTab === 'people' && (loading ? 'Loading…' : `${activeCount} active · ${teamUsers.length - activeCount} turned off`)}
             {activeTab === 'backups' && `${backups.length} of 5 capacity · Auto-backup ${backupConfig.autoBackupEnabled ? `every ${backupConfig.intervalHours}h` : 'off'}`}
             {activeTab === 'logs' && `${logs.length} of 200 logs · Reversible audit trail`}
+            {activeTab === 'smtp' && (smtpConfig.host ? `Connected to ${smtpConfig.host}:${smtpConfig.port}` : 'Configure outbound mail server for OTP verification')}
           </div>
         </div>
       </div>
@@ -503,6 +612,22 @@ export const AdminPanel = () => {
               <HistoryIcon size={18} />
               <span>Activity Logs</span>
               <span className="admin-tab-badge">{logs.length}/200</span>
+            </button>
+
+            <button
+              type="button"
+              className={`admin-tab ${activeTab === 'smtp' ? 'active' : ''}`}
+              role="tab"
+              aria-selected={activeTab === 'smtp'}
+              onClick={() => handleTabChange('smtp')}
+            >
+              <MailIcon size={18} />
+              <span>SMTP Email</span>
+              {smtpConfig.host && (
+                <span className="admin-tab-badge" style={{ background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent)' }}>
+                  Ready
+                </span>
+              )}
             </button>
           </div>
 
@@ -594,6 +719,21 @@ export const AdminPanel = () => {
                       autoCapitalize="none"
                       spellCheck="false"
                       required
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="admEmail">Email <small style={{ color: 'var(--muted)', fontWeight: 400 }}>(for OTP recovery)</small></label>
+                    <input
+                      className="input"
+                      id="admEmail"
+                      type="email"
+                      maxLength={80}
+                      placeholder="e.g. aditi@company.com"
+                      value={userEmail}
+                      onChange={e => setUserEmail(e.target.value)}
+                      autoCapitalize="none"
+                      spellCheck="false"
                     />
                   </div>
 
@@ -733,6 +873,20 @@ export const AdminPanel = () => {
                                 style={{ padding: '8px 12px', fontSize: '1rem' }}
                               />
                             </div>
+                            <div className="field" style={{ margin: 0 }}>
+                              <label style={{ fontSize: '0.82rem', color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Email (for OTP recovery)</label>
+                              <input
+                                className="input"
+                                type="email"
+                                maxLength={80}
+                                value={editEmail}
+                                onChange={(e) => setEditEmail(e.target.value)}
+                                placeholder="e.g. aditi@company.com"
+                                autoCapitalize="none"
+                                spellCheck="false"
+                                style={{ padding: '8px 12px', fontSize: '1rem' }}
+                              />
+                            </div>
                           </div>
 
                           {editError && <div className="err" style={{ fontSize: '0.88rem' }}>{editError}</div>}
@@ -781,7 +935,7 @@ export const AdminPanel = () => {
                             </span>
                           </div>
                           <div className="person-sub">
-                            @{u.u} · {u.lastSeen ? 'Active recently' : "Hasn't signed in yet"}
+                            @{u.u}{u.email ? ` · ${u.email}` : ''} · {u.lastSeen ? 'Active recently' : "Hasn't signed in yet"}
                           </div>
                         </div>
                         <div className="person-actions">
@@ -1295,10 +1449,166 @@ export const AdminPanel = () => {
             </section>
           )}
 
+          {/* ==================================================== */}
+          {/* TAB 4: SMTP EMAIL SETTINGS                           */}
+          {/* ==================================================== */}
+          {activeTab === 'smtp' && (
+            <>
+              <section className="card">
+                <div className="card-title">Outbound SMTP Mail Server</div>
+                <p className="card-note">
+                  Used to send one-time verification codes (OTPs) when users forget their passwords. Supports standard SMTP (Gmail, Zoho, Outlook, AWS SES, Hostinger, cPanel, etc.).
+                </p>
+
+                {smtpConfig.isFromEnv && (
+                  <div style={{ background: 'color-mix(in srgb, var(--accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)', borderRadius: '12px', padding: '10px 14px', fontSize: '.9rem', margin: '10px 0' }}>
+                    ℹ️ Current settings were loaded from environment variables (<code>.env</code>). You can override them here if desired.
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveSmtp} className="adm-form" autoComplete="off" style={{ marginTop: '12px' }}>
+                  <div className="field">
+                    <label htmlFor="smtpHost">SMTP Server Host <span className="req-star" aria-hidden="true">*</span></label>
+                    <input
+                      className="input"
+                      id="smtpHost"
+                      required
+                      placeholder="e.g. smtp.gmail.com or mail.yourdomain.com"
+                      value={smtpConfig.host}
+                      onChange={e => setSmtpConfig(prev => ({ ...prev, host: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="smtpPort">Port <span className="req-star" aria-hidden="true">*</span></label>
+                    <input
+                      className="input mono"
+                      id="smtpPort"
+                      type="number"
+                      required
+                      placeholder="587 or 465"
+                      value={smtpConfig.port}
+                      onChange={e => setSmtpConfig(prev => ({ ...prev, port: parseInt(e.target.value, 10) || '' }))}
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="smtpUser">Username / Account Email <span className="req-star" aria-hidden="true">*</span></label>
+                    <input
+                      className="input"
+                      id="smtpUser"
+                      type="email"
+                      required
+                      placeholder="e.g. alerts@mydeepwork.in or you@gmail.com"
+                      value={smtpConfig.user}
+                      onChange={e => setSmtpConfig(prev => ({ ...prev, user: e.target.value }))}
+                      autoCapitalize="none"
+                      spellCheck="false"
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="smtpPass">
+                      Password / App Password {smtpConfig.hasPass && <span style={{ color: 'var(--accent)', fontSize: '.8rem' }}>(Configured)</span>}
+                    </label>
+                    <div className="pw-wrap">
+                      <input
+                        className="input mono"
+                        id="smtpPass"
+                        type={showSmtpPass ? 'text' : 'password'}
+                        placeholder={smtpConfig.hasPass ? '•••••••• (leave blank to keep current)' : 'App password or SMTP password'}
+                        value={smtpConfig.pass}
+                        onChange={e => setSmtpConfig(prev => ({ ...prev, pass: e.target.value }))}
+                        autoComplete="new-password"
+                      />
+                      <button
+                        type="button"
+                        className="pw-eye"
+                        aria-label="Show password"
+                        onClick={() => setShowSmtpPass(!showSmtpPass)}
+                      >
+                        <EyeIcon />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="smtpFrom">Sender Display (From)</label>
+                    <input
+                      className="input"
+                      id="smtpFrom"
+                      placeholder='e.g. "MyDeepwork" <no-reply@mydeepwork.in>'
+                      value={smtpConfig.from}
+                      onChange={e => setSmtpConfig(prev => ({ ...prev, from: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="field" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginTop: '16px' }}>
+                      <input
+                        type="checkbox"
+                        checked={smtpConfig.secure}
+                        onChange={e => setSmtpConfig(prev => ({ ...prev, secure: e.target.checked }))}
+                        style={{ width: '18px', height: '18px', accentColor: 'var(--accent)' }}
+                      />
+                      <span style={{ fontSize: '.95rem' }}>Use SSL/TLS (Direct port 465)</span>
+                    </label>
+                    <small style={{ color: 'var(--muted)', marginTop: '4px', fontSize: '.8rem' }}>
+                      Leave unchecked for Port 587 (STARTTLS, standard for Gmail / Office 365).
+                    </small>
+                  </div>
+
+                  {smtpStatusErr && <div className="err" style={{ gridColumn: '1/-1' }}>{smtpStatusErr}</div>}
+                  {smtpStatusMsg && (
+                    <div style={{ gridColumn: '1/-1', background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent)', padding: '10px 14px', borderRadius: '10px', fontSize: '.92rem' }}>
+                      {smtpStatusMsg}
+                    </div>
+                  )}
+
+                  <div style={{ gridColumn: '1/-1', display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' }}>
+                    <button className="btn" type="submit" disabled={smtpSaving}>
+                      {smtpSaving ? 'Saving…' : 'Save SMTP Settings'}
+                    </button>
+                  </div>
+                </form>
+              </section>
+
+              <section className="card">
+                <div className="card-title">Test SMTP Connection & Send Test OTP</div>
+                <p className="card-note">
+                  Enter an email address to send a real test email through your configured SMTP server to verify everything works properly.
+                </p>
+
+                <form onSubmit={handleTestSmtp} style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
+                  <div style={{ flex: '1 1 240px' }}>
+                    <input
+                      className="input"
+                      type="email"
+                      required
+                      placeholder="your.email@example.com"
+                      value={testEmail}
+                      onChange={e => setTestEmail(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    className="pill ink"
+                    type="submit"
+                    disabled={smtpTesting || !smtpConfig.host || !smtpConfig.user}
+                    style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                  >
+                    <MailIcon size={18} />
+                    <span>{smtpTesting ? 'Testing connection…' : 'Send Test Email'}</span>
+                  </button>
+                </form>
+              </section>
+            </>
+          )}
+
           <p className="card-note foot">
             {activeTab === 'people' && 'People can use their username and password to sign into MyDeepwork. Accounts are stored in MongoDB.'}
             {activeTab === 'backups' && 'Backups store lists, notes, CRM records, and users. Max capacity is 5 backups.'}
             {activeTab === 'logs' && 'Audit logs keep an immutable log of up to 200 operations with single-click undo.'}
+            {activeTab === 'smtp' && 'SMTP email delivery is used for sending single-use OTP codes for password resets.'}
           </p>
 
         </div>

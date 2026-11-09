@@ -63,6 +63,14 @@ export const authAPI = {
   acceptPrivacyPolicy: (version = '2023-dpdp-v1') => request('/auth/accept-privacy', {
     method: 'POST',
     body: JSON.stringify({ version })
+  }),
+  requestPasswordResetOtp: (identifier) => request('/auth/forgot-password/request-otp', {
+    method: 'POST',
+    body: JSON.stringify({ identifier })
+  }),
+  verifyPasswordResetOtp: (username, otp, newPassword) => request('/auth/forgot-password/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify({ username, otp, newPassword })
   })
 };
 
@@ -166,6 +174,15 @@ export const adminAPI = {
   },
   undoLog: (id) => request('/admin/logs/' + encodeURIComponent(id) + '/undo', {
     method: 'POST'
+  }),
+  getSmtpConfig: () => request('/admin/smtp'),
+  updateSmtpConfig: (smtpData) => request('/admin/smtp', {
+    method: 'PUT',
+    body: JSON.stringify(smtpData)
+  }),
+  testSmtp: (data) => request('/admin/smtp/test', {
+    method: 'POST',
+    body: JSON.stringify(data)
   })
 };
 

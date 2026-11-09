@@ -1,8 +1,12 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
 import { List } from '../models/List.js';
 import { Config } from '../models/Config.js';
+import { PasswordResetOtp } from '../models/PasswordResetOtp.js';
+import { sendPasswordResetOtpEmail } from '../services/emailService.js';
+import { recordLog } from '../services/auditLogService.js';
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'mydeepwork_secret', {
@@ -11,6 +15,13 @@ const generateToken = (id) => {
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+
+const maskEmail = (email) => {
+  if (!email || !email.includes('@')) return email || '';
+  const [user, domain] = email.split('@');
+  if (user.length <= 2) return `${user[0]}*@${domain}`;
+  return `${user.slice(0, 2)}${'*'.repeat(Math.max(1, user.length - 3))}${user.slice(-1)}@${domain}`;
+};
 
 // Seed default lists for a brand-new user
 const seedStarterBoard = async (userId) => {
@@ -116,6 +127,7 @@ export const pinLogin = async (req, res) => {
       user: {
         id: user._id,
         username: user.username,
+        email: user.email || '',
         name: user.name,
         role: user.role,
         crm: !!user.crm,
@@ -173,6 +185,7 @@ export const teamLogin = async (req, res) => {
       user: {
         id: user._id,
         username: user.username,
+        email: user.email || '',
         name: user.name,
         role: user.role,
         crm: !!user.crm,
@@ -195,6 +208,7 @@ export const getMe = async (req, res) => {
     user: {
       id: req.user._id,
       username: req.user.username,
+      email: req.user.email || '',
       name: req.user.name,
       role: req.user.role,
       crm: !!req.user.crm,
@@ -234,9 +248,16 @@ export const updateProfile = async (req, res) => {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
-    const { name, photo, prefs, activeId, activeNoteId, tab } = req.body;
+    const { name, email, photo, prefs, activeId, activeNoteId, tab } = req.body;
 
     if (name) user.name = name.trim();
+    if (email !== undefined) {
+      const e = (email || '').trim().toLowerCase();
+      if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
+        return res.status(400).json({ message: 'Invalid email address.' });
+      }
+      user.email = e || null;
+    }
     if (photo !== undefined) user.photo = photo;
     if (prefs) user.prefs = { ...user.prefs, ...prefs };
     if (activeId !== undefined) user.activeId = activeId;
@@ -249,6 +270,7 @@ export const updateProfile = async (req, res) => {
       user: {
         id: user._id,
         username: user.username,
+        email: user.email || '',
         name: user.name,
         role: user.role,
         crm: !!user.crm,
@@ -265,4 +287,172 @@ export const updateProfile = async (req, res) => {
     res.status(500).json({ message: 'Server error updating profile.' });
   }
 };
+
+/**
+ * Request OTP verification code for forgotten password via SMTP
+ */
+export const requestPasswordResetOtp = async (req, res) => {
+  try {
+    const { identifier } = req.body;
+    if (!identifier || !identifier.trim()) {
+      return res.status(400).json({ message: 'Please enter your username or registered email.' });
+    }
+
+    const cleanId = identifier.trim().toLowerCase();
+    const user = await User.findOne({
+      $or: [
+        { username: cleanId },
+        { email: cleanId }
+      ]
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'No account found for that username or email.' });
+    }
+
+    if (user.status !== 'active') {
+      return res.status(403).json({ message: 'This account has been deactivated. Please contact your administrator.' });
+    }
+
+    if (!user.email || !user.email.includes('@')) {
+      return res.status(400).json({
+        message: `No email address is linked to account @${user.username}. Please ask an administrator to add an email to your account or reset your password.`
+      });
+    }
+
+    // Rate-limit: 1 request per 60 seconds
+    const recentOtp = await PasswordResetOtp.findOne({
+      userId: user._id,
+      createdAt: { $gte: new Date(Date.now() - 60 * 1000) }
+    });
+    if (recentOtp) {
+      return res.status(429).json({
+        message: 'A verification code was already sent recently. Please wait a minute before requesting another code.'
+      });
+    }
+
+    // Generate cryptographically secure 6-digit numeric OTP
+    const rawOtp = crypto.randomInt(100000, 1000000).toString();
+    const salt = await bcrypt.genSalt(10);
+    const otpHash = await bcrypt.hash(rawOtp, salt);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Clear previous OTPs and record new one
+    await PasswordResetOtp.deleteMany({ userId: user._id });
+    await PasswordResetOtp.create({
+      userId: user._id,
+      username: user.username,
+      email: user.email,
+      otpHash,
+      expiresAt,
+      attempts: 0
+    });
+
+    // Send email via configured SMTP
+    await sendPasswordResetOtpEmail({
+      toEmail: user.email,
+      userName: user.name || user.username,
+      otpCode: rawOtp,
+      minutesValid: 10
+    });
+
+    const masked = maskEmail(user.email);
+    res.json({
+      success: true,
+      message: `A 6-digit verification code has been sent to ${masked}.`,
+      username: user.username,
+      email: masked
+    });
+  } catch (err) {
+    console.error('requestPasswordResetOtp error:', err);
+    res.status(500).json({
+      message: err.message || 'Error sending verification code. Please check SMTP settings or try again.'
+    });
+  }
+};
+
+/**
+ * Verify OTP and reset password
+ */
+export const verifyPasswordResetOtp = async (req, res) => {
+  try {
+    const { username, otp, newPassword } = req.body;
+
+    if (!username || !otp || !newPassword) {
+      return res.status(400).json({ message: 'Username, OTP verification code, and new password are required.' });
+    }
+
+    const cleanUser = username.trim().toLowerCase();
+    const cleanOtp = String(otp).trim();
+
+    if (!/^\d{6}$/.test(cleanOtp)) {
+      return res.status(400).json({ message: 'Verification code must be exactly 6 digits.' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: 'New password must be at least 8 characters long.' });
+    }
+
+    const user = await User.findOne({ username: cleanUser });
+    if (!user) {
+      return res.status(404).json({ message: 'Account not found.' });
+    }
+
+    const otpDoc = await PasswordResetOtp.findOne({
+      userId: user._id,
+      expiresAt: { $gt: new Date() }
+    });
+
+    if (!otpDoc) {
+      return res.status(400).json({
+        message: 'Verification code has expired or is invalid. Please request a new code.'
+      });
+    }
+
+    if (otpDoc.attempts >= 5) {
+      await PasswordResetOtp.deleteOne({ _id: otpDoc._id });
+      return res.status(400).json({
+        message: 'Too many incorrect attempts. For security, please request a new verification code.'
+      });
+    }
+
+    const isMatch = await bcrypt.compare(cleanOtp, otpDoc.otpHash);
+    if (!isMatch) {
+      otpDoc.attempts += 1;
+      await otpDoc.save();
+      const remaining = 5 - otpDoc.attempts;
+      return res.status(400).json({
+        message: `Invalid verification code. ${remaining > 0 ? `${remaining} attempt${remaining > 1 ? 's' : ''} remaining.` : 'Please request a new code.'}`
+      });
+    }
+
+    // Set new password
+    const salt = await bcrypt.genSalt(10);
+    user.passwordHash = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    // Clean up OTPs
+    await PasswordResetOtp.deleteMany({ userId: user._id });
+
+    // Record audit log
+    await recordLog({
+      action: 'reset_password_otp',
+      category: 'auth',
+      actor: { username: user.username, name: user.name, role: user.role },
+      details: `Password reset via email OTP for @${user.username}`,
+      targetId: user.username,
+      targetType: 'user',
+      canUndo: false
+    });
+
+    res.json({
+      success: true,
+      message: 'Password reset successfully! You can now sign in with your new password.'
+    });
+  } catch (err) {
+    console.error('verifyPasswordResetOtp error:', err);
+    res.status(500).json({ message: err.message || 'Error resetting password.' });
+  }
+};
+
 

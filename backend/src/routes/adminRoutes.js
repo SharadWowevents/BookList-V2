@@ -6,7 +6,8 @@ import {
   getBackupsController, createManualBackupController,
   restoreBackupController, deleteBackupController, downloadBackupController,
   getBackupConfigController, updateBackupConfigController,
-  getLogsController, undoLogController
+  getLogsController, undoLogController,
+  getSmtpConfigController, updateSmtpConfigController, testSmtpController
 } from '../controllers/adminController.js';
 import { protect, adminOnly } from '../middleware/auth.js';
 
@@ -43,5 +44,10 @@ router.put('/backup-config', updateBackupConfigController);
 // Activity Logs (Max 200 capacity & Undo)
 router.get('/logs', getLogsController);
 router.post('/logs/:id/undo', undoLogController);
+
+// SMTP Configuration & Testing
+router.get('/smtp', getSmtpConfigController);
+router.put('/smtp', updateSmtpConfigController);
+router.post('/smtp/test', testSmtpController);
 
 export default router;

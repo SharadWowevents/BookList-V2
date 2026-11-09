@@ -1,17 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
 import Sortable from 'sortablejs';
 import { useApp } from '../context/AppContext';
+import { authAPI } from '../services/api';
 import { ACCENTS, uid, reorderSubset, PLANS, LABELS, crmMatches } from '../utils/constants';
 import {
   PlusIcon, StarIcon, GripIcon, PanelIcon, ListPlusIcon, NotePlusIcon,
   ListsIcon, NotesIcon, GearIcon, SunIcon, MoonIcon, MonitorIcon,
-  LogoutIcon, ShieldIcon, CameraIcon, EyeIcon, UsersIcon, CrmIcon, JournalIcon, ArchetypeIcon
+  LogoutIcon, ShieldIcon, CameraIcon, EyeIcon, UsersIcon, CrmIcon, JournalIcon, ArchetypeIcon, MailIcon
 } from './Icons';
 import { mmdd, today0, jHas, moodName } from './JournalView';
 
 export const Sidebar = () => {
   const {
-    board, updateBoard, ui, setUi, session, signOut,
+    board, updateBoard, ui, setUi, session, setSession, signOut,
     accent, setAccent, theme, setTheme,
     collapsed, setCollapsed, photo, savePhoto, removePhoto,
     showToast,
@@ -25,6 +26,37 @@ export const Sidebar = () => {
   const [newListName, setNewListName] = useState('');
   const menuRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  // Recovery email editing state
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailInput, setEmailInput] = useState(session?.email || '');
+  const [savingEmail, setSavingEmail] = useState(false);
+
+  useEffect(() => {
+    setEmailInput(session?.email || '');
+  }, [session?.email]);
+
+  const handleSaveEmail = async (e) => {
+    e.preventDefault();
+    const cleanEmail = emailInput.trim();
+    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      showToast('Please enter a valid email address.');
+      return;
+    }
+    setSavingEmail(true);
+    try {
+      const res = await authAPI.updateProfile({ email: cleanEmail || null });
+      if (res?.user) {
+        setSession(res.user);
+      }
+      setEditingEmail(false);
+      showToast('Recovery email updated.');
+    } catch (err) {
+      showToast(err.message || 'Could not update recovery email.');
+    } finally {
+      setSavingEmail(false);
+    }
+  };
 
   // Close menu on click outside
   useEffect(() => {
@@ -265,6 +297,9 @@ export const Sidebar = () => {
         </label>
         <div className="me-text">
           <span className="me-name">{session?.name || 'You'}</span>
+          {session?.username && (
+            <span style={{ fontSize: '.8rem', color: 'var(--muted)' }}>@{session.username}</span>
+          )}
           <span className="photo-actions">
             <label className="text-btn" htmlFor="sidebarPhotoInput">
               {photo ? 'Change photo' : 'Add photo'}
@@ -288,6 +323,62 @@ export const Sidebar = () => {
           hidden
           onChange={handlePhotoUpload}
         />
+      </div>
+
+      {/* Recovery Email Box */}
+      <div style={{ padding: '8px 12px 10px', background: 'var(--soft)', borderRadius: '12px', margin: '4px 10px 8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
+          <span style={{ fontSize: '.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <MailIcon size={13} /> Recovery Email
+          </span>
+          {!editingEmail && (
+            <button
+              type="button"
+              className="text-btn"
+              style={{ fontSize: '.8rem' }}
+              onClick={() => setEditingEmail(true)}
+            >
+              {session?.email ? 'Edit' : 'Add'}
+            </button>
+          )}
+        </div>
+        {editingEmail ? (
+          <form onSubmit={handleSaveEmail} style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+            <input
+              type="email"
+              className="input"
+              style={{ fontSize: '.88rem', padding: '6px 10px' }}
+              placeholder="your@email.com"
+              value={emailInput}
+              onChange={e => setEmailInput(e.target.value)}
+              autoFocus
+              disabled={savingEmail}
+            />
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                type="submit"
+                className="pill ink"
+                style={{ fontSize: '.78rem', padding: '3px 9px' }}
+                disabled={savingEmail}
+              >
+                {savingEmail ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                type="button"
+                className="pill plain"
+                style={{ fontSize: '.78rem', padding: '3px 8px' }}
+                onClick={() => { setEditingEmail(false); setEmailInput(session?.email || ''); }}
+                disabled={savingEmail}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div style={{ fontSize: '.88rem', color: session?.email ? 'var(--ink)' : 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={session?.email || ''}>
+            {session?.email || 'None (needed for OTP reset)'}
+          </div>
+        )}
       </div>
 
       <div className="menu-sep"></div>
