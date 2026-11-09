@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { authAPI, setToken, adminAPI } from '../services/api';
-import { EyeIcon, MailIcon, CheckIcon, BackIcon } from './Icons';
+import { EyeIcon, MailIcon, CheckIcon, BackIcon, KeyIcon, XIcon } from './Icons';
 
 async function sha256(str) {
   try {
@@ -36,6 +36,57 @@ export const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [requireLogin, setRequireLogin] = useState(false);
+
+  // Contact Admin Reset Query State
+  const [showContactAdmin, setShowContactAdmin] = useState(false);
+  const [adminReqType, setAdminReqType] = useState('pin'); // 'pin' | 'password'
+  const [adminReqName, setAdminReqName] = useState('');
+  const [adminReqEmail, setAdminReqEmail] = useState('');
+  const [adminReqNote, setAdminReqNote] = useState('');
+  const [adminReqSubmitting, setAdminReqSubmitting] = useState(false);
+  const [adminReqSuccess, setAdminReqSuccess] = useState(false);
+  const [adminReqError, setAdminReqError] = useState('');
+
+  const handleOpenContactAdmin = (type = 'pin') => {
+    setAdminReqType(type);
+    setAdminReqName(type === 'pin' ? (name.trim() || '') : (username.trim() || ''));
+    setAdminReqEmail('');
+    setAdminReqNote('');
+    setAdminReqError('');
+    setAdminReqSuccess(false);
+    setShowContactAdmin(true);
+  };
+
+  const handleSubmitContactAdmin = async (e) => {
+    e.preventDefault();
+    setAdminReqError('');
+    const trimmedName = adminReqName.trim();
+    const trimmedEmail = adminReqEmail.trim().toLowerCase();
+
+    if (!trimmedName) {
+      setAdminReqError(adminReqType === 'pin' ? 'Please enter your name.' : 'Please enter your username.');
+      return;
+    }
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setAdminReqError('Please enter a valid email address.');
+      return;
+    }
+
+    setAdminReqSubmitting(true);
+    try {
+      await authAPI.submitResetRequest({
+        identifier: trimmedName,
+        email: trimmedEmail,
+        type: adminReqType,
+        note: adminReqNote.trim()
+      });
+      setAdminReqSuccess(true);
+    } catch (err) {
+      setAdminReqError(err.message || 'Error submitting query to administrator.');
+    } finally {
+      setAdminReqSubmitting(false);
+    }
+  };
 
   // Forgot password & PIN OTP verification state
   const [forgotStep, setForgotStep] = useState(1); // 1: identifier, 2: otp & new credentials, 3: success
@@ -572,7 +623,7 @@ export const Login = () => {
                   type="button"
                   className="link"
                   style={{ fontSize: '.84rem', color: 'var(--accent)', textDecoration: 'none', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                  onClick={() => handleGoToForgot('pin')}
+                  onClick={() => handleOpenContactAdmin('pin')}
                 >
                   Forgot PIN?
                 </button>
@@ -599,7 +650,7 @@ export const Login = () => {
             </button>
 
             <p className="login-note">
-              New name? An account is created with that PIN. Forgot your PIN? Tap "Forgot PIN?" above to reset it via email OTP.
+              New name? An account is created with that PIN. Forgot your PIN? Tap "Forgot PIN?" above to contact the admin.
             </p>
 
             <button
@@ -638,7 +689,7 @@ export const Login = () => {
                   type="button"
                   className="link"
                   style={{ fontSize: '.84rem', color: 'var(--accent)', textDecoration: 'none', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                  onClick={handleGoToForgot}
+                  onClick={() => handleOpenContactAdmin('password')}
                 >
                   Forgot password?
                 </button>
@@ -673,7 +724,7 @@ export const Login = () => {
             </button>
 
             <p className="login-note">
-              Forgot your password? Tap "Forgot password?" above to receive an OTP on your email, or ask an administrator.
+              Forgot your password? Tap "Forgot password?" above to submit a reset query to the administrator.
             </p>
 
             {!requireLogin && (
@@ -700,6 +751,151 @@ export const Login = () => {
           </button>
         </div>
       </div>
+
+      {/* Contact Admin Modal for Forgot PIN / Password */}
+      {showContactAdmin && (
+        <div
+          className="modal-back"
+          onClick={() => setShowContactAdmin(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="modal"
+            style={{ maxWidth: '440px' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="modal-head">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent)', display: 'grid', placeItems: 'center' }}>
+                  <KeyIcon size={20} />
+                </div>
+                <h2 style={{ fontSize: '1.25rem', margin: 0 }}>
+                  {adminReqType === 'pin' ? 'Forgot 4-Digit PIN' : 'Forgot Password'}
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setShowContactAdmin(false)}
+                aria-label="Close"
+              >
+                <XIcon />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '16px 22px' }}>
+              {adminReqSuccess ? (
+                <div style={{ textAlign: 'center', padding: '16px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
+                  <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent)', display: 'grid', placeItems: 'center' }}>
+                    <CheckIcon size={28} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: '0 0 6px', fontSize: '1.2rem', fontFamily: 'var(--display)' }}>
+                      Query Sent to Administrator!
+                    </h3>
+                    <p style={{ margin: 0, fontSize: '.92rem', color: 'var(--muted)', lineHeight: 1.5 }}>
+                      Your reset query for <strong>{adminReqName}</strong> has been submitted.
+                      Your email <strong>{adminReqEmail}</strong> was recorded with this request.
+                    </p>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '.86rem', color: 'var(--muted)', lineHeight: 1.4 }}>
+                    The administrator will review your query in the Admin Panel and provide your new {adminReqType === 'pin' ? 'PIN' : 'credentials'}.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ width: '100%', marginTop: '6px' }}
+                    onClick={() => setShowContactAdmin(false)}
+                  >
+                    Done
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmitContactAdmin} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <p style={{ margin: 0, fontSize: '.92rem', color: 'var(--muted)', lineHeight: 1.45 }}>
+                    Enter your name and email address. An administrator will review your query in the Admin Panel to reset your {adminReqType === 'pin' ? 'PIN' : 'password'}.
+                  </p>
+
+                  <div className="field">
+                    <label htmlFor="admReqName">
+                      {adminReqType === 'pin' ? 'Your Name' : 'Username'} <span className="req-star" aria-hidden="true">*</span>
+                    </label>
+                    <input
+                      className="input"
+                      id="admReqName"
+                      required
+                      placeholder={adminReqType === 'pin' ? 'e.g. Sachin' : 'e.g. sachin.t'}
+                      value={adminReqName}
+                      onChange={e => setAdminReqName(e.target.value)}
+                      disabled={adminReqSubmitting}
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="admReqEmail">
+                      Your Email Address <span className="req-star" aria-hidden="true">*</span>
+                    </label>
+                    <input
+                      className="input"
+                      id="admReqEmail"
+                      type="email"
+                      required
+                      placeholder="e.g. sachin@company.com"
+                      value={adminReqEmail}
+                      onChange={e => setAdminReqEmail(e.target.value)}
+                      disabled={adminReqSubmitting}
+                      autoCapitalize="none"
+                      spellCheck="false"
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="admReqNote">
+                      Note / Message <span style={{ color: 'var(--muted)', fontSize: '.8rem' }}>(optional)</span>
+                    </label>
+                    <textarea
+                      className="input"
+                      id="admReqNote"
+                      rows={2}
+                      placeholder="Optional details for administrator..."
+                      value={adminReqNote}
+                      onChange={e => setAdminReqNote(e.target.value)}
+                      disabled={adminReqSubmitting}
+                      style={{ resize: 'none', minHeight: '60px' }}
+                    />
+                  </div>
+
+                  {adminReqError && (
+                    <div className="err" style={{ margin: 0 }}>{adminReqError}</div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+                    <button
+                      type="button"
+                      className="btn secondary"
+                      style={{ flex: 1 }}
+                      onClick={() => setShowContactAdmin(false)}
+                      disabled={adminReqSubmitting}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn"
+                      style={{ flex: 1.5 }}
+                      disabled={adminReqSubmitting}
+                    >
+                      {adminReqSubmitting ? 'Submitting…' : 'Submit Query'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

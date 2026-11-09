@@ -4,6 +4,7 @@ import { List } from '../models/List.js';
 import { Note } from '../models/Note.js';
 import { Config } from '../models/Config.js';
 import { Share } from '../models/Share.js';
+import { ResetRequest } from '../models/ResetRequest.js';
 import {
   createBackup,
   getBackups,
@@ -616,4 +617,183 @@ export const testSmtpController = async (req, res) => {
     res.status(400).json({ message: `SMTP verification failed: ${err.message}` });
   }
 };
+
+/* ============================================================
+   Reset Requests Management
+   ============================================================ */
+const WORDS = "amber,atlas,bloom,cedar,coral,delta,ember,fable,grove,harbor,indigo,juniper,lotus,maple,meadow,nova,orbit,pebble,quartz,river,saffron,summit,tango,tidal,velvet,willow,zephyr,canyon,falcon,lagoon".split(",");
+
+const generateRandomPassword = () => {
+  const w1 = WORDS[Math.floor(Math.random() * WORDS.length)];
+  const w2 = WORDS[Math.floor(Math.random() * WORDS.length)];
+  const num = Math.floor(1000 + Math.random() * 9000);
+  return `${w1}-${w2}-${num}`;
+};
+
+const generateRandomPin = () => {
+  return String(Math.floor(1000 + Math.random() * 9000));
+};
+
+export const getResetRequestsController = async (req, res) => {
+  try {
+    const requests = await ResetRequest.find()
+      .sort({ createdAt: -1 })
+      .populate('user', 'name username email role authType status');
+    res.json({ requests });
+  } catch (err) {
+    console.error('getResetRequests error:', err);
+    res.status(500).json({ message: 'Error retrieving reset requests.' });
+  }
+};
+
+export const acceptResetRequestController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newCred: customCred, adminNote } = req.body;
+
+    const request = await ResetRequest.findById(id);
+    if (!request) {
+      return res.status(404).json({ message: 'Reset request not found.' });
+    }
+
+    if (request.status !== 'pending') {
+      return res.status(400).json({ message: `This request has already been ${request.status}.` });
+    }
+
+    // Locate the target user
+    let user = null;
+    if (request.user) {
+      user = await User.findById(request.user);
+    }
+    if (!user && request.username) {
+      user = await User.findOne({ username: request.username.toLowerCase() });
+    }
+    if (!user && request.email) {
+      user = await User.findOne({ email: request.email.toLowerCase() });
+    }
+    if (!user && request.identifier) {
+      const safeRegex = request.identifier.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      user = await User.findOne({
+        $or: [
+          { username: request.identifier.trim().toLowerCase() },
+          { name: new RegExp(`^${safeRegex}$`, 'i') }
+        ]
+      });
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        message: `No matching user account found for "${request.name || request.username || request.identifier}".`
+      });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    let newCred = '';
+
+    if (request.type === 'pin') {
+      newCred = (customCred && /^\d{4}$/.test(String(customCred).trim()))
+        ? String(customCred).trim()
+        : generateRandomPin();
+
+      user.pinHash = await bcrypt.hash(newCred, salt);
+      user.authType = 'pin';
+    } else {
+      newCred = (customCred && String(customCred).trim().length >= 8)
+        ? String(customCred).trim()
+        : generateRandomPassword();
+
+      user.passwordHash = await bcrypt.hash(newCred, salt);
+      user.authType = 'password';
+    }
+
+    // If user didn't have an email on record or request provided email, update user email
+    if (request.email && !user.email) {
+      user.email = request.email.toLowerCase();
+    }
+    await user.save();
+
+    request.user = user._id;
+    request.status = 'accepted';
+    request.newCredGenerated = newCred;
+    request.resolvedBy = req.user.username;
+    request.resolvedAt = new Date();
+    if (adminNote) {
+      request.adminNote = adminNote.trim();
+    }
+    await request.save();
+
+    await recordLog({
+      action: 'accept_reset_request',
+      category: 'admin',
+      actor: req.user,
+      details: `Accepted ${request.type === 'pin' ? 'PIN' : 'password'} reset request for @${user.username} (${user.name}). Generated new ${request.type === 'pin' ? 'PIN' : 'password'}.`,
+      targetId: user.username,
+      targetType: 'user',
+      canUndo: false
+    });
+
+    res.json({
+      success: true,
+      message: `${request.type === 'pin' ? 'PIN' : 'Password'} reset accepted successfully!`,
+      newCred,
+      request
+    });
+  } catch (err) {
+    console.error('acceptResetRequest error:', err);
+    res.status(500).json({ message: err.message || 'Error accepting reset request.' });
+  }
+};
+
+export const declineResetRequestController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { adminNote } = req.body;
+
+    const request = await ResetRequest.findById(id);
+    if (!request) {
+      return res.status(404).json({ message: 'Reset request not found.' });
+    }
+
+    if (request.status !== 'pending') {
+      return res.status(400).json({ message: `This request has already been ${request.status}.` });
+    }
+
+    request.status = 'declined';
+    request.adminNote = (adminNote || 'Declined by administrator').trim();
+    request.resolvedBy = req.user.username;
+    request.resolvedAt = new Date();
+    await request.save();
+
+    await recordLog({
+      action: 'decline_reset_request',
+      category: 'admin',
+      actor: req.user,
+      details: `Declined ${request.type === 'pin' ? 'PIN' : 'password'} reset request for ${request.name || request.username || request.identifier}.`,
+      targetId: request.username || request.identifier,
+      targetType: 'user',
+      canUndo: false
+    });
+
+    res.json({
+      success: true,
+      message: 'Reset request declined.',
+      request
+    });
+  } catch (err) {
+    console.error('declineResetRequest error:', err);
+    res.status(500).json({ message: err.message || 'Error declining reset request.' });
+  }
+};
+
+export const deleteResetRequestController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await ResetRequest.findByIdAndDelete(id);
+    res.json({ success: true, message: 'Reset request deleted.' });
+  } catch (err) {
+    console.error('deleteResetRequest error:', err);
+    res.status(500).json({ message: 'Error deleting reset request.' });
+  }
+};
+
 

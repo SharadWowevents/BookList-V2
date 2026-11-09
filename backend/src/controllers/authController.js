@@ -5,6 +5,7 @@ import { User } from '../models/User.js';
 import { List } from '../models/List.js';
 import { Config } from '../models/Config.js';
 import { PasswordResetOtp } from '../models/PasswordResetOtp.js';
+import { ResetRequest } from '../models/ResetRequest.js';
 import { sendPasswordResetOtpEmail } from '../services/emailService.js';
 import { recordLog } from '../services/auditLogService.js';
 
@@ -479,6 +480,57 @@ export const verifyPasswordResetOtp = async (req, res) => {
   } catch (err) {
     console.error('verifyPasswordResetOtp error:', err);
     res.status(500).json({ message: err.message || 'Error resetting credentials.' });
+  }
+};
+
+/* ============================================================
+   Contact Admin Reset Request
+   ============================================================ */
+export const submitResetRequest = async (req, res) => {
+  try {
+    const { identifier, email, type = 'pin', note } = req.body;
+    if (!identifier || !identifier.trim()) {
+      return res.status(400).json({ message: 'Name or username is required.' });
+    }
+    if (!email || !email.trim()) {
+      return res.status(400).json({ message: 'Email address is required.' });
+    }
+
+    const cleanId = identifier.trim();
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return res.status(400).json({ message: 'Please enter a valid email address.' });
+    }
+
+    const safeRegex = cleanId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const user = await User.findOne({
+      $or: [
+        { username: cleanId.toLowerCase() },
+        { email: cleanEmail },
+        { name: new RegExp(`^${safeRegex}$`, 'i') }
+      ]
+    });
+
+    const requestDoc = await ResetRequest.create({
+      user: user ? user._id : null,
+      identifier: cleanId,
+      username: user ? user.username : cleanId.toLowerCase().replace(/[^a-z0-9._-]/g, ''),
+      name: user ? user.name : cleanId,
+      email: cleanEmail,
+      type: type === 'password' ? 'password' : 'pin',
+      note: (note || '').trim(),
+      status: 'pending'
+    });
+
+    res.json({
+      success: true,
+      message: 'Your reset request has been submitted to the administrator.',
+      id: requestDoc._id
+    });
+  } catch (err) {
+    console.error('submitResetRequest error:', err);
+    res.status(500).json({ message: err.message || 'Error submitting reset query.' });
   }
 };
 

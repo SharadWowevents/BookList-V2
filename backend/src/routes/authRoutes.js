@@ -6,7 +6,8 @@ import {
   updateProfile,
   acceptPrivacyPolicy,
   requestPasswordResetOtp,
-  verifyPasswordResetOtp
+  verifyPasswordResetOtp,
+  submitResetRequest
 } from '../controllers/authController.js';
 import { protect } from '../middleware/auth.js';
 
@@ -14,6 +15,7 @@ const router = express.Router();
 
 router.post('/pin-login', pinLogin);
 router.post('/team-login', teamLogin);
+router.post('/reset-request', submitResetRequest);
 router.post('/forgot-password/request-otp', requestPasswordResetOtp);
 router.post('/forgot-password/verify-otp', verifyPasswordResetOtp);
 router.get('/me', protect, getMe);

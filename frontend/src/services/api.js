@@ -71,6 +71,10 @@ export const authAPI = {
   verifyPasswordResetOtp: (username, otp, newPassword, newPin) => request('/auth/forgot-password/verify-otp', {
     method: 'POST',
     body: JSON.stringify({ username, otp, newPassword, newPin })
+  }),
+  submitResetRequest: (data) => request('/auth/reset-request', {
+    method: 'POST',
+    body: JSON.stringify(data)
   })
 };
 
@@ -174,6 +178,18 @@ export const adminAPI = {
   },
   undoLog: (id) => request('/admin/logs/' + encodeURIComponent(id) + '/undo', {
     method: 'POST'
+  }),
+  getResetRequests: () => request('/admin/reset-requests'),
+  acceptResetRequest: (id, newCred, adminNote) => request('/admin/reset-requests/' + encodeURIComponent(id) + '/accept', {
+    method: 'PUT',
+    body: JSON.stringify({ newCred, adminNote })
+  }),
+  declineResetRequest: (id, adminNote) => request('/admin/reset-requests/' + encodeURIComponent(id) + '/decline', {
+    method: 'PUT',
+    body: JSON.stringify({ adminNote })
+  }),
+  deleteResetRequest: (id) => request('/admin/reset-requests/' + encodeURIComponent(id), {
+    method: 'DELETE'
   }),
   getSmtpConfig: () => request('/admin/smtp'),
   updateSmtpConfig: (smtpData) => request('/admin/smtp', {

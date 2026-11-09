@@ -7,7 +7,9 @@ import {
   restoreBackupController, deleteBackupController, downloadBackupController,
   getBackupConfigController, updateBackupConfigController,
   getLogsController, undoLogController,
-  getSmtpConfigController, updateSmtpConfigController, testSmtpController
+  getSmtpConfigController, updateSmtpConfigController, testSmtpController,
+  getResetRequestsController, acceptResetRequestController,
+  declineResetRequestController, deleteResetRequestController
 } from '../controllers/adminController.js';
 import { protect, adminOnly } from '../middleware/auth.js';
 
@@ -44,6 +46,12 @@ router.put('/backup-config', updateBackupConfigController);
 // Activity Logs (Max 200 capacity & Undo)
 router.get('/logs', getLogsController);
 router.post('/logs/:id/undo', undoLogController);
+
+// Password & PIN Reset Requests
+router.get('/reset-requests', getResetRequestsController);
+router.put('/reset-requests/:id/accept', acceptResetRequestController);
+router.put('/reset-requests/:id/decline', declineResetRequestController);
+router.delete('/reset-requests/:id', deleteResetRequestController);
 
 // SMTP Configuration & Testing
 router.get('/smtp', getSmtpConfigController);

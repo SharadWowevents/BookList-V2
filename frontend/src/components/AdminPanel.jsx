@@ -104,23 +104,20 @@ export const AdminPanel = () => {
   const [undoingId, setUndoingId] = useState(null);
   const [confirmUndoId, setConfirmUndoId] = useState(null);
 
-  // SMTP Settings Tab State
-  const [smtpConfig, setSmtpConfig] = useState({
-    host: '',
-    port: 587,
-    secure: false,
-    user: '',
-    pass: '',
-    from: '',
-    hasPass: false,
-    isFromEnv: false
-  });
-  const [showSmtpPass, setShowSmtpPass] = useState(false);
-  const [smtpSaving, setSmtpSaving] = useState(false);
-  const [smtpTesting, setSmtpTesting] = useState(false);
-  const [testEmail, setTestEmail] = useState('');
-  const [smtpStatusMsg, setSmtpStatusMsg] = useState('');
-  const [smtpStatusErr, setSmtpStatusErr] = useState('');
+  // Reset Queries Tab State
+  const [resetRequests, setResetRequests] = useState([]);
+  const [resetRequestsLoading, setResetRequestsLoading] = useState(false);
+  const [queryFilter, setQueryFilter] = useState('pending'); // 'pending' | 'all' | 'accepted' | 'declined'
+  const [acceptModal, setAcceptModal] = useState({ open: false, request: null });
+  const [acceptCredInput, setAcceptCredInput] = useState('');
+  const [acceptAdminNote, setAcceptAdminNote] = useState('');
+  const [acceptSubmitting, setAcceptSubmitting] = useState(false);
+  const [acceptedResult, setAcceptedResult] = useState(null);
+  const [declineModal, setDeclineModal] = useState({ open: false, request: null });
+  const [declineAdminNote, setDeclineAdminNote] = useState('');
+  const [declineSubmitting, setDeclineSubmitting] = useState(false);
+  const [deleteConfirmReq, setDeleteConfirmReq] = useState(null);
+  const [deletingReq, setDeletingReq] = useState(false);
 
   // Initial load
   useEffect(() => {
@@ -130,14 +127,16 @@ export const AdminPanel = () => {
       adminAPI.getUsers().catch(() => ({ users: [] })),
       adminAPI.getBackups().catch(() => ({ backups: [] })),
       adminAPI.getBackupConfig().catch(() => ({ autoBackupEnabled: true, intervalHours: 24 })),
-      adminAPI.getLogs({ limit: 200 }).catch(() => ({ logs: [] }))
-    ]).then(([cfg, usersRes, bkpRes, bkpCfg, logsRes]) => {
+      adminAPI.getLogs({ limit: 200 }).catch(() => ({ logs: [] })),
+      adminAPI.getResetRequests().catch(() => ({ requests: [] }))
+    ]).then(([cfg, usersRes, bkpRes, bkpCfg, logsRes, reqRes]) => {
       if (!ignore) {
         setRequireLogin(!!cfg?.requireLogin);
         setTeamUsers(usersRes?.users || []);
         setBackups(bkpRes?.backups || []);
         if (bkpCfg) setBackupConfig(bkpCfg);
         setLogs(logsRes?.logs || []);
+        setResetRequests(reqRes?.requests || []);
         setLoading(false);
       }
     }).catch(() => {
@@ -154,85 +153,111 @@ export const AdminPanel = () => {
       loadBackupConfig();
     } else if (tab === 'logs') {
       loadLogs();
-    } else if (tab === 'smtp') {
-      loadSmtpConfig();
+    } else if (tab === 'queries') {
+      loadResetRequests();
     }
   };
 
-  const loadSmtpConfig = async () => {
+  const loadResetRequests = async () => {
+    setResetRequestsLoading(true);
     try {
-      const cfg = await adminAPI.getSmtpConfig();
-      if (cfg) {
-        setSmtpConfig(prev => ({
-          ...prev,
-          host: cfg.host || '',
-          port: cfg.port || 587,
-          secure: !!cfg.secure,
-          user: cfg.user || '',
-          pass: '',
-          from: cfg.from || '',
-          hasPass: !!cfg.hasPass,
-          isFromEnv: !!cfg.isFromEnv
-        }));
-      }
+      const res = await adminAPI.getResetRequests();
+      setResetRequests(res?.requests || []);
     } catch {
-      showToast('Could not load SMTP configuration.');
+      showToast('Could not load reset requests.');
+    } finally {
+      setResetRequestsLoading(false);
     }
   };
 
-  const handleSaveSmtp = async (e) => {
+  const handleOpenAcceptModal = (req) => {
+    const defaultCred = req.type === 'pin'
+      ? String(Math.floor(1000 + Math.random() * 9000))
+      : genPassword();
+    setAcceptCredInput(defaultCred);
+    setAcceptAdminNote('');
+    setAcceptModal({ open: true, request: req });
+  };
+
+  const handleConfirmAccept = async (e) => {
     e.preventDefault();
-    setSmtpSaving(true);
-    setSmtpStatusMsg('');
-    setSmtpStatusErr('');
+    if (!acceptModal.request) return;
+    const req = acceptModal.request;
+    const cred = acceptCredInput.trim();
 
+    if (req.type === 'pin' && !/^\d{4}$/.test(cred)) {
+      showToast('PIN must be exactly 4 digits.');
+      return;
+    }
+    if (req.type === 'password' && cred.length < 8) {
+      showToast('Password must be at least 8 characters.');
+      return;
+    }
+
+    setAcceptSubmitting(true);
     try {
-      const payload = {
-        host: smtpConfig.host,
-        port: Number(smtpConfig.port) || 587,
-        secure: smtpConfig.secure,
-        user: smtpConfig.user,
-        from: smtpConfig.from
-      };
-      if (smtpConfig.pass && smtpConfig.pass.trim()) {
-        payload.pass = smtpConfig.pass.trim();
-      }
-
-      const res = await adminAPI.updateSmtpConfig(payload);
-      showToast(res.message || 'SMTP settings saved.');
-      setSmtpStatusMsg('SMTP configuration saved successfully.');
-      setSmtpConfig(prev => ({ ...prev, pass: '', hasPass: res.config?.hasPass }));
+      const res = await adminAPI.acceptResetRequest(req._id, cred, acceptAdminNote);
+      showToast(res.message || 'Reset request accepted.');
+      setAcceptedResult({
+        open: true,
+        cred: res.newCred || cred,
+        username: req.username || req.identifier,
+        name: req.name || req.identifier,
+        type: req.type,
+        email: req.email
+      });
+      setAcceptModal({ open: false, request: null });
+      loadResetRequests();
+      adminAPI.getUsers().then(uRes => setTeamUsers(uRes?.users || [])).catch(() => {});
     } catch (err) {
-      setSmtpStatusErr(err.message || 'Failed to save SMTP settings.');
+      showToast(err.message || 'Failed to accept reset request.');
     } finally {
-      setSmtpSaving(false);
+      setAcceptSubmitting(false);
     }
   };
 
-  const handleTestSmtp = async (e) => {
-    e.preventDefault();
-    setSmtpTesting(true);
-    setSmtpStatusMsg('');
-    setSmtpStatusErr('');
+  const handleOpenDeclineModal = (req) => {
+    setDeclineAdminNote('');
+    setDeclineModal({ open: true, request: req });
+  };
 
+  const handleConfirmDecline = async (e) => {
+    e.preventDefault();
+    if (!declineModal.request) return;
+    setDeclineSubmitting(true);
     try {
-      const payload = {
-        host: smtpConfig.host,
-        port: Number(smtpConfig.port) || 587,
-        secure: smtpConfig.secure,
-        user: smtpConfig.user,
-        pass: smtpConfig.pass,
-        from: smtpConfig.from,
-        testEmail: testEmail.trim() || session?.email || ''
-      };
-      const res = await adminAPI.testSmtp(payload);
-      setSmtpStatusMsg(res.message || 'SMTP test passed successfully!');
-      showToast('SMTP connection successful!');
+      const res = await adminAPI.declineResetRequest(declineModal.request._id, declineAdminNote);
+      showToast(res.message || 'Reset query declined.');
+      setDeclineModal({ open: false, request: null });
+      loadResetRequests();
     } catch (err) {
-      setSmtpStatusErr(err.message || 'SMTP test failed.');
+      showToast(err.message || 'Failed to decline request.');
     } finally {
-      setSmtpTesting(false);
+      setDeclineSubmitting(false);
     }
+  };
+
+  const handleDeleteRequest = async (id) => {
+    setDeletingReq(true);
+    try {
+      await adminAPI.deleteResetRequest(id);
+      showToast('Reset request deleted.');
+      setDeleteConfirmReq(null);
+      loadResetRequests();
+    } catch (err) {
+      showToast(err.message || 'Failed to delete request.');
+    } finally {
+      setDeletingReq(false);
+    }
+  };
+
+  const copyAcceptedCreds = () => {
+    if (!acceptedResult) return;
+    const txt = `MyDeepwork Sign-In Details\nAccount: ${acceptedResult.name} (@${acceptedResult.username})\nNew ${acceptedResult.type === 'pin' ? '4-Digit PIN' : 'Password'}: ${acceptedResult.cred}\nSign in: ${window.location.origin}/login`;
+    navigator.clipboard.writeText(txt).then(
+      () => showToast('New sign-in details copied!'),
+      () => showToast('Details copied.')
+    );
   };
 
   const loadBackups = async () => {
@@ -531,6 +556,16 @@ export const AdminPanel = () => {
     });
   }, [logs, logCategory, logSearch]);
 
+  const pendingQueriesCount = resetRequests.filter(r => r.status === 'pending').length;
+  const filteredRequests = useMemo(() => {
+    return resetRequests.filter(r => {
+      if (queryFilter === 'pending') return r.status === 'pending';
+      if (queryFilter === 'accepted') return r.status === 'accepted';
+      if (queryFilter === 'declined') return r.status === 'declined';
+      return true;
+    });
+  }, [resetRequests, queryFilter]);
+
   const credsText = creds
     ? `MyDeepwork sign-in\nLink: ${window.location.origin}/login\nUsername: ${creds.u}\nPassword: ${creds.pw}`
     : '';
@@ -562,13 +597,13 @@ export const AdminPanel = () => {
             {activeTab === 'people' && 'People & Access'}
             {activeTab === 'backups' && 'Backups'}
             {activeTab === 'logs' && 'Activity Logs'}
-            {activeTab === 'smtp' && 'SMTP Email & OTP'}
+            {activeTab === 'queries' && 'Reset Queries'}
           </div>
           <div className="sub">
             {activeTab === 'people' && (loading ? 'Loading…' : `${activeCount} active · ${teamUsers.length - activeCount} turned off`)}
             {activeTab === 'backups' && `${backups.length} of 5 capacity · Auto-backup ${backupConfig.autoBackupEnabled ? `every ${backupConfig.intervalHours}h` : 'off'}`}
             {activeTab === 'logs' && `${logs.length} of 200 logs · Reversible audit trail`}
-            {activeTab === 'smtp' && (smtpConfig.host ? `Connected to ${smtpConfig.host}:${smtpConfig.port}` : 'Configure outbound mail server for OTP verification')}
+            {activeTab === 'queries' && (resetRequestsLoading ? 'Loading queries…' : `${pendingQueriesCount} pending review · ${resetRequests.length} total queries`)}
           </div>
         </div>
       </div>
@@ -616,17 +651,27 @@ export const AdminPanel = () => {
 
             <button
               type="button"
-              className={`admin-tab ${activeTab === 'smtp' ? 'active' : ''}`}
+              className={`admin-tab ${activeTab === 'queries' ? 'active' : ''}`}
               role="tab"
-              aria-selected={activeTab === 'smtp'}
-              onClick={() => handleTabChange('smtp')}
+              aria-selected={activeTab === 'queries'}
+              onClick={() => handleTabChange('queries')}
             >
-              <MailIcon size={18} />
-              <span>SMTP Email</span>
-              {smtpConfig.host && (
-                <span className="admin-tab-badge" style={{ background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent)' }}>
-                  Ready
+              <KeyIcon size={18} />
+              <span>Reset Queries</span>
+              {pendingQueriesCount > 0 ? (
+                <span
+                  className="admin-tab-badge"
+                  style={{
+                    background: '#ef4444',
+                    color: '#fff',
+                    fontWeight: 700,
+                    padding: '2px 7px'
+                  }}
+                >
+                  {pendingQueriesCount}
                 </span>
+              ) : (
+                <span className="admin-tab-badge">{resetRequests.length}</span>
               )}
             </button>
           </div>
@@ -1450,156 +1495,313 @@ export const AdminPanel = () => {
           )}
 
           {/* ==================================================== */}
-          {/* TAB 4: SMTP EMAIL SETTINGS                           */}
+          {/* TAB 4: RESET QUERIES                                 */}
           {/* ==================================================== */}
-          {activeTab === 'smtp' && (
+          {activeTab === 'queries' && (
             <>
               <section className="card">
-                <div className="card-title">Outbound SMTP Mail Server</div>
-                <p className="card-note">
-                  Used to send one-time verification codes (OTPs) when users forget their passwords. Supports standard SMTP (Gmail, Zoho, Outlook, AWS SES, Hostinger, cPanel, etc.).
-                </p>
-
-                {smtpConfig.isFromEnv && (
-                  <div style={{ background: 'color-mix(in srgb, var(--accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)', borderRadius: '12px', padding: '10px 14px', fontSize: '.9rem', margin: '10px 0' }}>
-                    ℹ️ Current settings were loaded from environment variables (<code>.env</code>). You can override them here if desired.
-                  </div>
-                )}
-
-                <form onSubmit={handleSaveSmtp} className="adm-form" autoComplete="off" style={{ marginTop: '12px' }}>
-                  <div className="field">
-                    <label htmlFor="smtpHost">SMTP Server Host <span className="req-star" aria-hidden="true">*</span></label>
-                    <input
-                      className="input"
-                      id="smtpHost"
-                      required
-                      placeholder="e.g. smtp.gmail.com or mail.yourdomain.com"
-                      value={smtpConfig.host}
-                      onChange={e => setSmtpConfig(prev => ({ ...prev, host: e.target.value }))}
-                    />
-                  </div>
-
-                  <div className="field">
-                    <label htmlFor="smtpPort">Port <span className="req-star" aria-hidden="true">*</span></label>
-                    <input
-                      className="input mono"
-                      id="smtpPort"
-                      type="number"
-                      required
-                      placeholder="587 or 465"
-                      value={smtpConfig.port}
-                      onChange={e => setSmtpConfig(prev => ({ ...prev, port: parseInt(e.target.value, 10) || '' }))}
-                    />
-                  </div>
-
-                  <div className="field">
-                    <label htmlFor="smtpUser">Username / Account Email <span className="req-star" aria-hidden="true">*</span></label>
-                    <input
-                      className="input"
-                      id="smtpUser"
-                      type="email"
-                      required
-                      placeholder="e.g. alerts@mydeepwork.in or you@gmail.com"
-                      value={smtpConfig.user}
-                      onChange={e => setSmtpConfig(prev => ({ ...prev, user: e.target.value }))}
-                      autoCapitalize="none"
-                      spellCheck="false"
-                    />
-                  </div>
-
-                  <div className="field">
-                    <label htmlFor="smtpPass">
-                      Password / App Password {smtpConfig.hasPass && <span style={{ color: 'var(--accent)', fontSize: '.8rem' }}>(Configured)</span>}
-                    </label>
-                    <div className="pw-wrap">
-                      <input
-                        className="input mono"
-                        id="smtpPass"
-                        type={showSmtpPass ? 'text' : 'password'}
-                        placeholder={smtpConfig.hasPass ? '•••••••• (leave blank to keep current)' : 'App password or SMTP password'}
-                        value={smtpConfig.pass}
-                        onChange={e => setSmtpConfig(prev => ({ ...prev, pass: e.target.value }))}
-                        autoComplete="new-password"
-                      />
-                      <button
-                        type="button"
-                        className="pw-eye"
-                        aria-label="Show password"
-                        onClick={() => setShowSmtpPass(!showSmtpPass)}
-                      >
-                        <EyeIcon />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="field">
-                    <label htmlFor="smtpFrom">Sender Display (From)</label>
-                    <input
-                      className="input"
-                      id="smtpFrom"
-                      placeholder='e.g. "MyDeepwork" <no-reply@mydeepwork.in>'
-                      value={smtpConfig.from}
-                      onChange={e => setSmtpConfig(prev => ({ ...prev, from: e.target.value }))}
-                    />
-                  </div>
-
-                  <div className="field" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginTop: '16px' }}>
-                      <input
-                        type="checkbox"
-                        checked={smtpConfig.secure}
-                        onChange={e => setSmtpConfig(prev => ({ ...prev, secure: e.target.checked }))}
-                        style={{ width: '18px', height: '18px', accentColor: 'var(--accent)' }}
-                      />
-                      <span style={{ fontSize: '.95rem' }}>Use SSL/TLS (Direct port 465)</span>
-                    </label>
-                    <small style={{ color: 'var(--muted)', marginTop: '4px', fontSize: '.8rem' }}>
-                      Leave unchecked for Port 587 (STARTTLS, standard for Gmail / Office 365).
-                    </small>
-                  </div>
-
-                  {smtpStatusErr && <div className="err" style={{ gridColumn: '1/-1' }}>{smtpStatusErr}</div>}
-                  {smtpStatusMsg && (
-                    <div style={{ gridColumn: '1/-1', background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent)', padding: '10px 14px', borderRadius: '10px', fontSize: '.92rem' }}>
-                      {smtpStatusMsg}
-                    </div>
-                  )}
-
-                  <div style={{ gridColumn: '1/-1', display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' }}>
-                    <button className="btn" type="submit" disabled={smtpSaving}>
-                      {smtpSaving ? 'Saving…' : 'Save SMTP Settings'}
-                    </button>
-                  </div>
-                </form>
-              </section>
-
-              <section className="card">
-                <div className="card-title">Test SMTP Connection & Send Test OTP</div>
-                <p className="card-note">
-                  Enter an email address to send a real test email through your configured SMTP server to verify everything works properly.
-                </p>
-
-                <form onSubmit={handleTestSmtp} style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
-                  <div style={{ flex: '1 1 240px' }}>
-                    <input
-                      className="input"
-                      type="email"
-                      required
-                      placeholder="your.email@example.com"
-                      value={testEmail}
-                      onChange={e => setTestEmail(e.target.value)}
-                    />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <div className="card-title">Password & PIN Reset Queries</div>
+                    <p className="card-note">
+                      Review requests from users who forgot their PIN or password. Accept to generate new credentials and link their email, or decline.
+                    </p>
                   </div>
                   <button
-                    className="pill ink"
-                    type="submit"
-                    disabled={smtpTesting || !smtpConfig.host || !smtpConfig.user}
-                    style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    type="button"
+                    className="pill"
+                    onClick={loadResetRequests}
+                    disabled={resetRequestsLoading}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
-                    <MailIcon size={18} />
-                    <span>{smtpTesting ? 'Testing connection…' : 'Send Test Email'}</span>
+                    <RefreshIcon size={16} />
+                    <span>{resetRequestsLoading ? 'Refreshing…' : 'Refresh'}</span>
                   </button>
-                </form>
+                </div>
+
+                {/* Filter Tabs */}
+                <div className="log-chips" style={{ marginTop: '14px' }}>
+                  <button
+                    type="button"
+                    className={`log-chip ${queryFilter === 'pending' ? 'active' : ''}`}
+                    onClick={() => setQueryFilter('pending')}
+                  >
+                    Pending ({pendingQueriesCount})
+                  </button>
+                  <button
+                    type="button"
+                    className={`log-chip ${queryFilter === 'all' ? 'active' : ''}`}
+                    onClick={() => setQueryFilter('all')}
+                  >
+                    All ({resetRequests.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`log-chip ${queryFilter === 'accepted' ? 'active' : ''}`}
+                    onClick={() => setQueryFilter('accepted')}
+                  >
+                    Accepted ({resetRequests.filter(r => r.status === 'accepted').length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`log-chip ${queryFilter === 'declined' ? 'active' : ''}`}
+                    onClick={() => setQueryFilter('declined')}
+                  >
+                    Declined ({resetRequests.filter(r => r.status === 'declined').length})
+                  </button>
+                </div>
+
+                {/* Requests List */}
+                <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {resetRequestsLoading && resetRequests.length === 0 ? (
+                    <div style={{ padding: '30px', textAlign: 'center', color: 'var(--muted)' }}>
+                      Loading reset queries…
+                    </div>
+                  ) : filteredRequests.length === 0 ? (
+                    <div style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--muted)', background: 'var(--soft)', borderRadius: '14px', border: '1px dashed var(--line)' }}>
+                      <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>
+                        {queryFilter === 'pending' ? '🎉' : '📋'}
+                      </div>
+                      <div style={{ fontWeight: 600, fontSize: '1.05rem', color: 'var(--ink)' }}>
+                        {queryFilter === 'pending' ? 'No pending reset queries' : 'No queries match this filter'}
+                      </div>
+                      <p style={{ margin: '4px 0 0', fontSize: '.88rem' }}>
+                        {queryFilter === 'pending' ? 'All reset requests have been reviewed.' : 'Queries will appear here when users submit reset requests.'}
+                      </p>
+                    </div>
+                  ) : (
+                    filteredRequests.map(req => {
+                      const isPending = req.status === 'pending';
+                      const isAccepted = req.status === 'accepted';
+                      const isDeclined = req.status === 'declined';
+
+                      return (
+                        <div
+                          key={req._id}
+                          style={{
+                            background: 'var(--panel)',
+                            border: `1px solid ${isPending ? 'color-mix(in srgb, var(--accent) 35%, var(--line))' : 'var(--line)'}`,
+                            borderRadius: '16px',
+                            padding: '16px 18px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '12px',
+                            boxShadow: isPending ? '0 2px 8px rgba(0,0,0,.04)' : 'none'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <div style={{
+                                width: '40px',
+                                height: '40px',
+                                borderRadius: '12px',
+                                background: req.type === 'pin' ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'color-mix(in srgb, #3b82f6 15%, transparent)',
+                                color: req.type === 'pin' ? 'var(--accent)' : '#3b82f6',
+                                display: 'grid',
+                                placeItems: 'center',
+                                fontWeight: 700
+                              }}>
+                                <KeyIcon size={20} />
+                              </div>
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                  <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>
+                                    {req.name || req.identifier}
+                                  </span>
+                                  {req.username && (
+                                    <span style={{ color: 'var(--muted)', fontSize: '.88rem' }}>
+                                      @{req.username}
+                                    </span>
+                                  )}
+                                  <span style={{
+                                    fontSize: '.75rem',
+                                    fontWeight: 700,
+                                    padding: '2px 8px',
+                                    borderRadius: '999px',
+                                    textTransform: 'uppercase',
+                                    background: req.type === 'pin' ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'color-mix(in srgb, #3b82f6 12%, transparent)',
+                                    color: req.type === 'pin' ? 'var(--accent)' : '#3b82f6'
+                                  }}>
+                                    {req.type === 'pin' ? '4-Digit PIN' : 'Password'}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '.84rem', color: 'var(--muted)', marginTop: '2px' }}>
+                                  Submitted {timeAgo(req.createdAt)} · {formatFullDate(req.createdAt)}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {isPending && (
+                                <span style={{
+                                  padding: '4px 10px',
+                                  borderRadius: '999px',
+                                  fontSize: '.82rem',
+                                  fontWeight: 700,
+                                  background: 'color-mix(in srgb, #eab308 18%, transparent)',
+                                  color: '#ca8a04',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px'
+                                }}>
+                                  ● Pending
+                                </span>
+                              )}
+                              {isAccepted && (
+                                <span style={{
+                                  padding: '4px 10px',
+                                  borderRadius: '999px',
+                                  fontSize: '.82rem',
+                                  fontWeight: 700,
+                                  background: 'color-mix(in srgb, var(--accent) 15%, transparent)',
+                                  color: 'var(--accent)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px'
+                                }}>
+                                  <CheckIcon size={14} /> Accepted
+                                </span>
+                              )}
+                              {isDeclined && (
+                                <span style={{
+                                  padding: '4px 10px',
+                                  borderRadius: '999px',
+                                  fontSize: '.82rem',
+                                  fontWeight: 700,
+                                  background: 'color-mix(in srgb, var(--danger) 15%, transparent)',
+                                  color: 'var(--danger)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px'
+                                }}>
+                                  <XIcon size={14} /> Declined
+                                </span>
+                              )}
+
+                              <button
+                                type="button"
+                                className="icon-btn"
+                                onClick={() => setDeleteConfirmReq(req)}
+                                title="Delete query record"
+                                style={{ width: '32px', height: '32px', color: 'var(--muted)' }}
+                              >
+                                <TrashIcon size={17} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Email and note row */}
+                          <div style={{
+                            background: 'var(--soft)',
+                            padding: '10px 14px',
+                            borderRadius: '10px',
+                            fontSize: '.92rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ color: 'var(--muted)', fontWeight: 600, fontSize: '.84rem' }}>User Email:</span>
+                              <a
+                                href={`mailto:${req.email}`}
+                                style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}
+                              >
+                                {req.email}
+                              </a>
+                            </div>
+                            {req.note && (
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                                <span style={{ color: 'var(--muted)', fontWeight: 600, fontSize: '.84rem' }}>User Note:</span>
+                                <span style={{ color: 'var(--ink)' }}>{req.note}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Status Resolution details */}
+                          {isAccepted && (
+                            <div style={{
+                              background: 'color-mix(in srgb, var(--accent) 8%, transparent)',
+                              border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
+                              borderRadius: '10px',
+                              padding: '10px 14px',
+                              fontSize: '.9rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              flexWrap: 'wrap',
+                              gap: '10px'
+                            }}>
+                              <div>
+                                <div>
+                                  Reset completed by <strong>@{req.resolvedBy}</strong> on {formatFullDate(req.resolvedAt)}.
+                                </div>
+                                {req.newCredGenerated && (
+                                  <div style={{ marginTop: '4px' }}>
+                                    Generated {req.type === 'pin' ? 'PIN' : 'Password'}: <code style={{ fontWeight: 700, padding: '2px 6px', background: 'var(--panel)', borderRadius: '6px', fontSize: '.95rem' }}>{req.newCredGenerated}</code>
+                                  </div>
+                                )}
+                              </div>
+                              {req.newCredGenerated && (
+                                <button
+                                  type="button"
+                                  className="pill"
+                                  style={{ padding: '6px 12px', fontSize: '.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                  onClick={() => {
+                                    const txt = `MyDeepwork Sign-In Details\nAccount: ${req.name} (@${req.username})\nNew ${req.type === 'pin' ? '4-Digit PIN' : 'Password'}: ${req.newCredGenerated}\nSign in: ${window.location.origin}/login`;
+                                    navigator.clipboard.writeText(txt).then(
+                                      () => showToast('Credentials copied to clipboard!'),
+                                      () => showToast('Credentials copied.')
+                                    );
+                                  }}
+                                >
+                                  <CopyIcon size={14} />
+                                  <span>Copy Sign-In Details</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {isDeclined && (
+                            <div style={{
+                              background: 'color-mix(in srgb, var(--danger) 8%, transparent)',
+                              border: '1px solid color-mix(in srgb, var(--danger) 25%, transparent)',
+                              borderRadius: '10px',
+                              padding: '10px 14px',
+                              fontSize: '.9rem'
+                            }}>
+                              Declined by <strong>@{req.resolvedBy}</strong> on {formatFullDate(req.resolvedAt)}
+                              {req.adminNote && <span> · Reason: “{req.adminNote}”</span>}
+                            </div>
+                          )}
+
+                          {/* Actions for Pending */}
+                          {isPending && (
+                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', paddingTop: '4px' }}>
+                              <button
+                                type="button"
+                                className="btn"
+                                style={{ padding: '8px 18px', fontSize: '.92rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                onClick={() => handleOpenAcceptModal(req)}
+                              >
+                                <CheckIcon size={16} />
+                                <span>Accept & Reset {req.type === 'pin' ? 'PIN' : 'Password'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="btn secondary"
+                                style={{ padding: '8px 16px', fontSize: '.92rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                onClick={() => handleOpenDeclineModal(req)}
+                              >
+                                <XIcon size={16} />
+                                <span>Decline</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </section>
             </>
           )}
@@ -1608,11 +1810,285 @@ export const AdminPanel = () => {
             {activeTab === 'people' && 'People can use their username and password to sign into MyDeepwork. Accounts are stored in MongoDB.'}
             {activeTab === 'backups' && 'Backups store lists, notes, CRM records, and users. Max capacity is 5 backups.'}
             {activeTab === 'logs' && 'Audit logs keep an immutable log of up to 200 operations with single-click undo.'}
-            {activeTab === 'smtp' && 'SMTP email delivery is used for sending single-use OTP codes for password resets.'}
+            {activeTab === 'queries' && 'User password & PIN reset requests submitted from the login screen are reviewed and resolved here.'}
           </p>
 
         </div>
       </div>
+
+      {/* Accept Reset Request Modal */}
+      {acceptModal.open && acceptModal.request && (
+        <div className="modal-back" onClick={() => !acceptSubmitting && setAcceptModal({ open: false, request: null })} role="dialog" aria-modal="true">
+          <div className="modal" style={{ maxWidth: '460px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-head">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent)', display: 'grid', placeItems: 'center' }}>
+                  <KeyIcon size={20} />
+                </div>
+                <h2 style={{ fontSize: '1.25rem', margin: 0 }}>
+                  Accept & Reset {acceptModal.request.type === 'pin' ? '4-Digit PIN' : 'Password'}
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => !acceptSubmitting && setAcceptModal({ open: false, request: null })}
+                aria-label="Close"
+              >
+                <XIcon />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmAccept}>
+              <div className="modal-body" style={{ padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ background: 'var(--soft)', padding: '12px 14px', borderRadius: '12px', fontSize: '.9rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div><strong>User:</strong> {acceptModal.request.name} {acceptModal.request.username ? `(@${acceptModal.request.username})` : ''}</div>
+                  <div><strong>Email:</strong> {acceptModal.request.email}</div>
+                  {acceptModal.request.note && (
+                    <div style={{ color: 'var(--muted)', marginTop: '2px' }}>
+                      <strong>User Note:</strong> “{acceptModal.request.note}”
+                    </div>
+                  )}
+                </div>
+
+                <div className="field">
+                  <label htmlFor="acceptCredInput">
+                    {acceptModal.request.type === 'pin' ? 'New 4-Digit PIN' : 'New Password'} <span className="req-star" aria-hidden="true">*</span>
+                  </label>
+                  <input
+                    className={`input ${acceptModal.request.type === 'pin' ? 'mono' : ''}`}
+                    id="acceptCredInput"
+                    required
+                    maxLength={acceptModal.request.type === 'pin' ? 4 : 40}
+                    placeholder={acceptModal.request.type === 'pin' ? 'e.g. 4819' : 'At least 8 characters'}
+                    value={acceptCredInput}
+                    onChange={e => setAcceptCredInput(acceptModal.request.type === 'pin' ? e.target.value.replace(/\D/g, '').slice(0, 4) : e.target.value)}
+                    disabled={acceptSubmitting}
+                    autoFocus
+                    style={acceptModal.request.type === 'pin' ? { fontSize: '1.25rem', letterSpacing: '4px', fontWeight: 'bold' } : {}}
+                  />
+                  <small style={{ color: 'var(--muted)', marginTop: '4px', fontSize: '.8rem' }}>
+                    {acceptModal.request.type === 'pin'
+                      ? 'We auto-generated a 4-digit PIN. You can change it or keep it.'
+                      : 'We auto-generated a memorable password. You can change it or keep it.'}
+                  </small>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="acceptAdminNote">
+                    Admin Note <span style={{ color: 'var(--muted)', fontSize: '.8rem' }}>(optional record)</span>
+                  </label>
+                  <input
+                    className="input"
+                    id="acceptAdminNote"
+                    placeholder="e.g. Verified by admin"
+                    value={acceptAdminNote}
+                    onChange={e => setAcceptAdminNote(e.target.value)}
+                    disabled={acceptSubmitting}
+                  />
+                </div>
+              </div>
+
+              <div className="modal-foot">
+                <div className="grow" />
+                <button
+                  type="button"
+                  className="btn secondary"
+                  onClick={() => setAcceptModal({ open: false, request: null })}
+                  disabled={acceptSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn"
+                  disabled={acceptSubmitting || !acceptCredInput.trim()}
+                >
+                  {acceptSubmitting ? 'Resetting…' : 'Confirm & Reset'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Result Modal */}
+      {acceptedResult && (
+        <div className="modal-back" onClick={() => setAcceptedResult(null)} role="dialog" aria-modal="true">
+          <div className="modal" style={{ maxWidth: '440px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Reset Successful</h2>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setAcceptedResult(null)}
+                aria-label="Close"
+              >
+                <XIcon />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '16px 22px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent)', display: 'grid', placeItems: 'center' }}>
+                <CheckIcon size={28} />
+              </div>
+
+              <div>
+                <h3 style={{ margin: '0 0 6px', fontSize: '1.2rem', fontFamily: 'var(--display)' }}>
+                  Credentials Updated!
+                </h3>
+                <p style={{ margin: 0, fontSize: '.92rem', color: 'var(--muted)' }}>
+                  The account for <strong>{acceptedResult.name}</strong> has been reset.
+                </p>
+              </div>
+
+              <div style={{
+                width: '100%',
+                background: 'var(--soft)',
+                border: '1px solid var(--line)',
+                borderRadius: '12px',
+                padding: '14px 16px',
+                textAlign: 'left',
+                fontSize: '.92rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px'
+              }}>
+                <div><strong>Account:</strong> {acceptedResult.name} (@{acceptedResult.username})</div>
+                <div><strong>Email:</strong> {acceptedResult.email}</div>
+                <div>
+                  <strong>New {acceptedResult.type === 'pin' ? '4-Digit PIN' : 'Password'}: </strong>
+                  <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--accent)', letterSpacing: acceptedResult.type === 'pin' ? '3px' : 'normal' }}>
+                    {acceptedResult.cred}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="btn"
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                onClick={copyAcceptedCreds}
+              >
+                <CopyIcon size={18} />
+                <span>Copy Sign-In Details to Clipboard</span>
+              </button>
+
+              <button
+                type="button"
+                className="link"
+                onClick={() => setAcceptedResult(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Decline Reset Request Modal */}
+      {declineModal.open && declineModal.request && (
+        <div className="modal-back" onClick={() => !declineSubmitting && setDeclineModal({ open: false, request: null })} role="dialog" aria-modal="true">
+          <div className="modal" style={{ maxWidth: '420px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Decline Reset Query</h2>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => !declineSubmitting && setDeclineModal({ open: false, request: null })}
+                aria-label="Close"
+              >
+                <XIcon />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmDecline}>
+              <div className="modal-body" style={{ padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <p style={{ margin: 0, fontSize: '.92rem', color: 'var(--muted)' }}>
+                  Are you sure you want to decline the reset query for <strong>{declineModal.request.name || declineModal.request.identifier}</strong>?
+                </p>
+
+                <div className="field">
+                  <label htmlFor="declineReason">Reason for declining <span style={{ color: 'var(--muted)', fontSize: '.8rem' }}>(optional)</span></label>
+                  <input
+                    className="input"
+                    id="declineReason"
+                    placeholder="e.g. Unrecognized email / user not found"
+                    value={declineAdminNote}
+                    onChange={e => setDeclineAdminNote(e.target.value)}
+                    disabled={declineSubmitting}
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <div className="modal-foot">
+                <div className="grow" />
+                <button
+                  type="button"
+                  className="btn secondary"
+                  onClick={() => setDeclineModal({ open: false, request: null })}
+                  disabled={declineSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn"
+                  style={{ background: 'var(--danger)', borderColor: 'var(--danger)', color: '#fff' }}
+                  disabled={declineSubmitting}
+                >
+                  {declineSubmitting ? 'Declining…' : 'Decline Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Reset Request Modal */}
+      {deleteConfirmReq && (
+        <div className="modal-back" onClick={() => !deletingReq && setDeleteConfirmReq(null)} role="dialog" aria-modal="true">
+          <div className="modal" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2 style={{ fontSize: '1.2rem', margin: 0 }}>Delete Query Record</h2>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => !deletingReq && setDeleteConfirmReq(null)}
+                aria-label="Close"
+              >
+                <XIcon />
+              </button>
+            </div>
+            <div className="modal-body" style={{ padding: '16px 22px' }}>
+              <p style={{ margin: 0, fontSize: '.92rem', color: 'var(--muted)' }}>
+                Permanently delete this reset query record for <strong>{deleteConfirmReq.name || deleteConfirmReq.identifier}</strong>?
+              </p>
+            </div>
+            <div className="modal-foot">
+              <div className="grow" />
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => setDeleteConfirmReq(null)}
+                disabled={deletingReq}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn"
+                style={{ background: 'var(--danger)', borderColor: 'var(--danger)', color: '#fff' }}
+                onClick={() => handleDeleteRequest(deleteConfirmReq._id)}
+                disabled={deletingReq}
+              >
+                {deletingReq ? 'Deleting…' : 'Delete Record'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };
