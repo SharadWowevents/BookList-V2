@@ -37,14 +37,18 @@ export const Login = () => {
   const [loading, setLoading] = useState(false);
   const [requireLogin, setRequireLogin] = useState(false);
 
-  // Forgot password & OTP verification state
-  const [forgotStep, setForgotStep] = useState(1); // 1: identifier, 2: otp & new password, 3: success
+  // Forgot password & PIN OTP verification state
+  const [forgotStep, setForgotStep] = useState(1); // 1: identifier, 2: otp & new credentials, 3: success
+  const [forgotType, setForgotType] = useState('password'); // 'password' | 'pin'
   const [forgotIdentifier, setForgotIdentifier] = useState('');
   const [forgotTargetUser, setForgotTargetUser] = useState('');
+  const [forgotTargetName, setForgotTargetName] = useState('');
   const [forgotMaskedEmail, setForgotMaskedEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotError, setForgotError] = useState('');
@@ -165,7 +169,7 @@ export const Login = () => {
     setForgotError('');
     const id = forgotIdentifier.trim();
     if (!id) {
-      setForgotError('Please enter your username or registered email.');
+      setForgotError(forgotType === 'pin' ? 'Please enter your name or registered email.' : 'Please enter your username or registered email.');
       return;
     }
 
@@ -173,6 +177,10 @@ export const Login = () => {
     try {
       const res = await authAPI.requestPasswordResetOtp(id);
       setForgotTargetUser(res.username);
+      setForgotTargetName(res.name || res.username);
+      if (res.authType) {
+        setForgotType(res.authType);
+      }
       setForgotMaskedEmail(res.email);
       setForgotStep(2);
       setResendTimer(60);
@@ -194,45 +202,91 @@ export const Login = () => {
       return;
     }
 
-    if (newPassword.length < 8) {
-      setForgotError('Password must be at least 8 characters long.');
-      return;
-    }
+    if (forgotType === 'pin') {
+      const cleanPin = newPin.trim();
+      if (!/^\d{4}$/.test(cleanPin)) {
+        setForgotError('PIN must be exactly 4 digits.');
+        return;
+      }
+      if (cleanPin !== confirmPin.trim()) {
+        setForgotError('PINs do not match.');
+        return;
+      }
 
-    if (newPassword !== confirmPassword) {
-      setForgotError('Passwords do not match.');
-      return;
-    }
+      setForgotLoading(true);
+      try {
+        const res = await authAPI.verifyPasswordResetOtp(forgotTargetUser, cleanOtp, undefined, cleanPin);
 
-    setForgotLoading(true);
-    try {
-      const res = await authAPI.verifyPasswordResetOtp(forgotTargetUser, cleanOtp, newPassword);
-      setForgotStep(3);
-      showToast(res.message || 'Password reset successfully!');
-    } catch (err) {
-      setForgotError(err.message || 'Verification failed. Please check the OTP code and try again.');
-    } finally {
-      setForgotLoading(false);
+        // Also update local storage accounts hash if present
+        const key = (forgotTargetName || forgotTargetUser).toLowerCase();
+        try {
+          const accounts = JSON.parse(localStorage.getItem('listbook:accounts')) || {};
+          accounts[key] = await sha256(key + ":" + cleanPin);
+          localStorage.setItem('listbook:accounts', JSON.stringify(accounts));
+        } catch {}
+
+        setForgotStep(3);
+        showToast(res.message || 'PIN reset successfully!');
+      } catch (err) {
+        setForgotError(err.message || 'Verification failed. Please check the OTP code and try again.');
+      } finally {
+        setForgotLoading(false);
+      }
+    } else {
+      if (newPassword.length < 8) {
+        setForgotError('Password must be at least 8 characters long.');
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        setForgotError('Passwords do not match.');
+        return;
+      }
+
+      setForgotLoading(true);
+      try {
+        const res = await authAPI.verifyPasswordResetOtp(forgotTargetUser, cleanOtp, newPassword);
+        setForgotStep(3);
+        showToast(res.message || 'Password reset successfully!');
+      } catch (err) {
+        setForgotError(err.message || 'Verification failed. Please check the OTP code and try again.');
+      } finally {
+        setForgotLoading(false);
+      }
     }
   };
 
-  const handleGoToForgot = () => {
-    setForgotIdentifier(username.trim() || '');
+  const handleGoToForgot = (type = 'password') => {
+    setForgotType(type);
+    if (type === 'pin') {
+      setForgotIdentifier(name.trim() || '');
+    } else {
+      setForgotIdentifier(username.trim() || '');
+    }
     setForgotError('');
     setForgotStep(1);
     setOtp('');
     setNewPassword('');
     setConfirmPassword('');
+    setNewPin('');
+    setConfirmPin('');
     setMode('forgot');
   };
 
   const handleBackToSignIn = () => {
-    setMode('team');
+    if (forgotType === 'pin') {
+      setMode('local');
+      if (forgotTargetName) {
+        setName(forgotTargetName);
+      }
+    } else {
+      setMode('team');
+      if (forgotTargetUser) {
+        setUsername(forgotTargetUser);
+      }
+    }
     setError('');
     setForgotError('');
-    if (forgotTargetUser) {
-      setUsername(forgotTargetUser);
-    }
   };
 
   return (
@@ -260,18 +314,22 @@ export const Login = () => {
                 <BackIcon size={20} />
               </button>
               <h3 style={{ margin: 0, fontSize: '1.25rem', fontFamily: 'var(--display)' }}>
-                {forgotStep === 3 ? 'Password Updated' : 'Reset Password'}
+                {forgotStep === 3
+                  ? (forgotType === 'pin' ? 'PIN Updated' : 'Password Updated')
+                  : (forgotType === 'pin' ? 'Reset 4-Digit PIN' : 'Reset Password')}
               </h3>
             </div>
 
             {forgotStep === 1 && (
               <form onSubmit={handleRequestOtp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <p style={{ margin: 0, fontSize: '.95rem', color: 'var(--muted)', lineHeight: 1.5 }}>
-                  Enter your username or registered email address. We will send a 6-digit OTP verification code to your email.
+                  Enter your {forgotType === 'pin' ? 'name' : 'username'} or registered email address. We will send a 6-digit OTP verification code to your email.
                 </p>
 
                 <div className="field">
-                  <label htmlFor="fIdent">Username or Email <span className="req-star" aria-hidden="true">*</span></label>
+                  <label htmlFor="fIdent">
+                    {forgotType === 'pin' ? 'Name or Email' : 'Username or Email'} <span className="req-star" aria-hidden="true">*</span>
+                  </label>
                   <input
                     className="input"
                     id="fIdent"
@@ -279,7 +337,7 @@ export const Login = () => {
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck="false"
-                    placeholder="e.g. aditi.rao or aditi@company.com"
+                    placeholder={forgotType === 'pin' ? 'e.g. Sachin or sachin@company.com' : 'e.g. aditi.rao or aditi@company.com'}
                     value={forgotIdentifier}
                     onChange={e => setForgotIdentifier(e.target.value)}
                     autoFocus
@@ -330,49 +388,103 @@ export const Login = () => {
                   />
                 </div>
 
-                <div className="field">
-                  <label htmlFor="fNewPass">New Password <span className="req-star" aria-hidden="true">*</span></label>
-                  <div className="pw-wrap">
-                    <input
-                      className="input"
-                      id="fNewPass"
-                      required
-                      minLength={8}
-                      type={showNewPassword ? 'text' : 'password'}
-                      autoComplete="new-password"
-                      placeholder="At least 8 characters"
-                      value={newPassword}
-                      onChange={e => setNewPassword(e.target.value)}
-                      disabled={forgotLoading}
-                    />
-                    <button
-                      type="button"
-                      className="pw-eye"
-                      aria-label="Show password"
-                      onClick={() => setShowNewPassword(!showNewPassword)}
-                    >
-                      <EyeIcon />
-                    </button>
-                  </div>
-                </div>
+                {forgotType === 'pin' ? (
+                  <>
+                    <div className="field">
+                      <label htmlFor="fNewPin">New 4-Digit PIN <span className="req-star" aria-hidden="true">*</span></label>
+                      <div className="pw-wrap">
+                        <input
+                          className="input mono"
+                          id="fNewPin"
+                          required
+                          inputMode="numeric"
+                          pattern="[0-9]{4}"
+                          maxLength={4}
+                          type={showNewPassword ? 'text' : 'password'}
+                          placeholder="••••"
+                          style={{ fontSize: '1.2rem', letterSpacing: '4px' }}
+                          value={newPin}
+                          onChange={e => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                          disabled={forgotLoading}
+                        />
+                        <button
+                          type="button"
+                          className="pw-eye"
+                          aria-label="Show PIN"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                        >
+                          <EyeIcon />
+                        </button>
+                      </div>
+                    </div>
 
-                <div className="field">
-                  <label htmlFor="fConfPass">Confirm New Password <span className="req-star" aria-hidden="true">*</span></label>
-                  <div className="pw-wrap">
-                    <input
-                      className="input"
-                      id="fConfPass"
-                      required
-                      minLength={8}
-                      type={showNewPassword ? 'text' : 'password'}
-                      autoComplete="new-password"
-                      placeholder="Re-enter new password"
-                      value={confirmPassword}
-                      onChange={e => setConfirmPassword(e.target.value)}
-                      disabled={forgotLoading}
-                    />
-                  </div>
-                </div>
+                    <div className="field">
+                      <label htmlFor="fConfPin">Confirm 4-Digit PIN <span className="req-star" aria-hidden="true">*</span></label>
+                      <div className="pw-wrap">
+                        <input
+                          className="input mono"
+                          id="fConfPin"
+                          required
+                          inputMode="numeric"
+                          pattern="[0-9]{4}"
+                          maxLength={4}
+                          type={showNewPassword ? 'text' : 'password'}
+                          placeholder="••••"
+                          style={{ fontSize: '1.2rem', letterSpacing: '4px' }}
+                          value={confirmPin}
+                          onChange={e => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                          disabled={forgotLoading}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="field">
+                      <label htmlFor="fNewPass">New Password <span className="req-star" aria-hidden="true">*</span></label>
+                      <div className="pw-wrap">
+                        <input
+                          className="input"
+                          id="fNewPass"
+                          required
+                          minLength={8}
+                          type={showNewPassword ? 'text' : 'password'}
+                          autoComplete="new-password"
+                          placeholder="At least 8 characters"
+                          value={newPassword}
+                          onChange={e => setNewPassword(e.target.value)}
+                          disabled={forgotLoading}
+                        />
+                        <button
+                          type="button"
+                          className="pw-eye"
+                          aria-label="Show password"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                        >
+                          <EyeIcon />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="field">
+                      <label htmlFor="fConfPass">Confirm New Password <span className="req-star" aria-hidden="true">*</span></label>
+                      <div className="pw-wrap">
+                        <input
+                          className="input"
+                          id="fConfPass"
+                          required
+                          minLength={8}
+                          type={showNewPassword ? 'text' : 'password'}
+                          autoComplete="new-password"
+                          placeholder="Re-enter new password"
+                          value={confirmPassword}
+                          onChange={e => setConfirmPassword(e.target.value)}
+                          disabled={forgotLoading}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.88rem' }}>
                   <span style={{ color: 'var(--muted)' }}>
@@ -399,7 +511,7 @@ export const Login = () => {
 
                 <button className="btn" type="submit" disabled={forgotLoading} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                   <CheckIcon size={18} />
-                  <span>{forgotLoading ? 'Verifying & resetting…' : 'Reset password & continue'}</span>
+                  <span>{forgotLoading ? 'Verifying & resetting…' : `Reset ${forgotType === 'pin' ? 'PIN' : 'password'} & continue`}</span>
                 </button>
 
                 <button
@@ -408,7 +520,7 @@ export const Login = () => {
                   style={{ alignSelf: 'flex-start' }}
                   onClick={() => setForgotStep(1)}
                 >
-                  ← Use a different username or email
+                  ← Use a different {forgotType === 'pin' ? 'name' : 'username'} or email
                 </button>
               </form>
             )}
@@ -419,9 +531,11 @@ export const Login = () => {
                   <CheckIcon size={28} />
                 </div>
                 <div>
-                  <h4 style={{ margin: '0 0 6px', fontSize: '1.2rem' }}>Password Reset Successful!</h4>
+                  <h4 style={{ margin: '0 0 6px', fontSize: '1.2rem' }}>
+                    {forgotType === 'pin' ? 'PIN Reset Successful!' : 'Password Reset Successful!'}
+                  </h4>
                   <p style={{ margin: 0, fontSize: '.95rem', color: 'var(--muted)' }}>
-                    Your password has been updated. You can now sign in with your new password.
+                    Your {forgotType === 'pin' ? '4-digit PIN' : 'password'} has been updated. You can now sign in with your new {forgotType === 'pin' ? 'PIN' : 'password'}.
                   </p>
                 </div>
                 <button
@@ -430,7 +544,7 @@ export const Login = () => {
                   style={{ width: '100%', marginTop: '8px' }}
                   onClick={handleBackToSignIn}
                 >
-                  Sign in now
+                  Sign in with {forgotType === 'pin' ? 'PIN' : 'password'} now
                 </button>
               </div>
             )}
@@ -452,7 +566,17 @@ export const Login = () => {
               />
             </div>
             <div className="field">
-              <label htmlFor="lpin">4-digit PIN <span className="req-star" aria-hidden="true">*</span></label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                <label htmlFor="lpin" style={{ margin: 0 }}>4-digit PIN <span className="req-star" aria-hidden="true">*</span></label>
+                <button
+                  type="button"
+                  className="link"
+                  style={{ fontSize: '.84rem', color: 'var(--accent)', textDecoration: 'none', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  onClick={() => handleGoToForgot('pin')}
+                >
+                  Forgot PIN?
+                </button>
+              </div>
               <input
                 className="input"
                 id="lpin"
@@ -475,7 +599,7 @@ export const Login = () => {
             </button>
 
             <p className="login-note">
-              New name? An account is created with that PIN and saved securely in MongoDB.
+              New name? An account is created with that PIN. Forgot your PIN? Tap "Forgot PIN?" above to reset it via email OTP.
             </p>
 
             <button

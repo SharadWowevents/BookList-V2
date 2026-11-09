@@ -68,9 +68,9 @@ export const authAPI = {
     method: 'POST',
     body: JSON.stringify({ identifier })
   }),
-  verifyPasswordResetOtp: (username, otp, newPassword) => request('/auth/forgot-password/verify-otp', {
+  verifyPasswordResetOtp: (username, otp, newPassword, newPin) => request('/auth/forgot-password/verify-otp', {
     method: 'POST',
-    body: JSON.stringify({ username, otp, newPassword })
+    body: JSON.stringify({ username, otp, newPassword, newPin })
   })
 };
 

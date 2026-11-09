@@ -75,9 +75,9 @@ export const createSmtpTransporter = (smtpConfig) => {
 };
 
 /**
- * Sends a password reset OTP verification email.
+ * Sends a password or PIN reset OTP verification email.
  */
-export const sendPasswordResetOtpEmail = async ({ toEmail, userName, otpCode, minutesValid = 10 }) => {
+export const sendPasswordResetOtpEmail = async ({ toEmail, userName, otpCode, minutesValid = 10, isPin = false }) => {
   const smtpConfig = await getActiveSmtpConfig();
   if (!smtpConfig) {
     throw new Error('SMTP email service is not configured. Please contact your system administrator to configure SMTP.');
@@ -87,6 +87,8 @@ export const sendPasswordResetOtpEmail = async ({ toEmail, userName, otpCode, mi
 
   const formattedOtp = String(otpCode);
   const fromAddress = smtpConfig.from || `"MyDeepwork" <${smtpConfig.user}>`;
+  const credType = isPin ? '4-digit PIN' : 'password';
+  const credTitle = isPin ? 'PIN' : 'Password';
 
   const html = `
 <!DOCTYPE html>
@@ -94,7 +96,7 @@ export const sendPasswordResetOtpEmail = async ({ toEmail, userName, otpCode, mi
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Password Reset Verification Code</title>
+  <title>${credTitle} Reset Verification Code</title>
 </head>
 <body style="margin: 0; padding: 24px; background-color: #0b0f12; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f0f3f6;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 520px; margin: 0 auto; background-color: #161b22; border-radius: 16px; border: 1px solid #30363d; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
@@ -111,11 +113,11 @@ export const sendPasswordResetOtpEmail = async ({ toEmail, userName, otpCode, mi
     <tr>
       <td style="padding: 28px 32px;">
         <h1 style="margin: 0 0 14px; font-size: 20px; font-weight: 700; color: #ffffff; letter-spacing: -0.01em;">
-          Password Reset Request
+          ${credTitle} Reset Request
         </h1>
         <p style="margin: 0 0 20px; font-size: 15px; line-height: 1.6; color: #8b949e;">
           Hello <strong style="color: #f0f3f6;">${userName || 'there'}</strong>,<br>
-          We received a request to reset your password for your MyDeepwork account. Use the single-use verification code below to verify your identity:
+          We received a request to reset the ${credType} for your MyDeepwork account. Use the single-use verification code below to verify your identity:
         </p>
 
         <!-- OTP Box -->
@@ -133,7 +135,7 @@ export const sendPasswordResetOtpEmail = async ({ toEmail, userName, otpCode, mi
         </p>
         
         <p style="margin: 20px 0 0; font-size: 12.5px; line-height: 1.5; color: #6e7681; border-top: 1px solid #21262d; padding-top: 16px;">
-          If you did not request a password reset, you can safely disregard this email. Your current password remains secure.
+          If you did not request this ${credType} reset, you can safely disregard this email. Your account remains secure.
         </p>
       </td>
     </tr>
@@ -150,11 +152,11 @@ export const sendPasswordResetOtpEmail = async ({ toEmail, userName, otpCode, mi
   `.trim();
 
   const text = `
-MyDeepwork - Password Reset Request
+MyDeepwork - ${credTitle} Reset Request
 
 Hello ${userName || 'there'},
 
-We received a request to reset your password for your MyDeepwork account.
+We received a request to reset the ${credType} for your MyDeepwork account.
 Your one-time verification code (OTP) is:
 
     ${formattedOtp}

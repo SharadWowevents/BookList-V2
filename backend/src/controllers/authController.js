@@ -289,25 +289,27 @@ export const updateProfile = async (req, res) => {
 };
 
 /**
- * Request OTP verification code for forgotten password via SMTP
+ * Request OTP verification code for forgotten password or PIN via SMTP
  */
 export const requestPasswordResetOtp = async (req, res) => {
   try {
     const { identifier } = req.body;
     if (!identifier || !identifier.trim()) {
-      return res.status(400).json({ message: 'Please enter your username or registered email.' });
+      return res.status(400).json({ message: 'Please enter your name, username, or registered email.' });
     }
 
     const cleanId = identifier.trim().toLowerCase();
+    const safeRegex = cleanId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const user = await User.findOne({
       $or: [
         { username: cleanId },
-        { email: cleanId }
+        { email: cleanId },
+        { name: new RegExp(`^${safeRegex}$`, 'i') }
       ]
     });
 
     if (!user) {
-      return res.status(404).json({ message: 'No account found for that username or email.' });
+      return res.status(404).json({ message: 'No account found matching that name, username, or email.' });
     }
 
     if (user.status !== 'active') {
@@ -315,8 +317,9 @@ export const requestPasswordResetOtp = async (req, res) => {
     }
 
     if (!user.email || !user.email.includes('@')) {
+      const idLabel = user.name || `@${user.username}`;
       return res.status(400).json({
-        message: `No email address is linked to account @${user.username}. Please ask an administrator to add an email to your account or reset your password.`
+        message: `No recovery email address is linked to account "${idLabel}". Please ask an administrator to add an email or reset your credentials.`
       });
     }
 
@@ -348,12 +351,15 @@ export const requestPasswordResetOtp = async (req, res) => {
       attempts: 0
     });
 
+    const isPinAccount = user.authType === 'pin';
+
     // Send email via configured SMTP
     await sendPasswordResetOtpEmail({
       toEmail: user.email,
       userName: user.name || user.username,
       otpCode: rawOtp,
-      minutesValid: 10
+      minutesValid: 10,
+      isPin: isPinAccount
     });
 
     const masked = maskEmail(user.email);
@@ -361,6 +367,8 @@ export const requestPasswordResetOtp = async (req, res) => {
       success: true,
       message: `A 6-digit verification code has been sent to ${masked}.`,
       username: user.username,
+      name: user.name,
+      authType: user.authType || 'password',
       email: masked
     });
   } catch (err) {
@@ -372,14 +380,14 @@ export const requestPasswordResetOtp = async (req, res) => {
 };
 
 /**
- * Verify OTP and reset password
+ * Verify OTP and reset password or PIN
  */
 export const verifyPasswordResetOtp = async (req, res) => {
   try {
-    const { username, otp, newPassword } = req.body;
+    const { username, otp, newPassword, newPin } = req.body;
 
-    if (!username || !otp || !newPassword) {
-      return res.status(400).json({ message: 'Username, OTP verification code, and new password are required.' });
+    if (!username || !otp || (!newPassword && !newPin)) {
+      return res.status(400).json({ message: 'Username, OTP verification code, and new credentials are required.' });
     }
 
     const cleanUser = username.trim().toLowerCase();
@@ -389,13 +397,22 @@ export const verifyPasswordResetOtp = async (req, res) => {
       return res.status(400).json({ message: 'Verification code must be exactly 6 digits.' });
     }
 
-    if (newPassword.length < 8) {
-      return res.status(400).json({ message: 'New password must be at least 8 characters long.' });
-    }
-
     const user = await User.findOne({ username: cleanUser });
     if (!user) {
       return res.status(404).json({ message: 'Account not found.' });
+    }
+
+    const isPinReset = Boolean(newPin || user.authType === 'pin');
+
+    if (isPinReset) {
+      const pinValue = String(newPin || newPassword).trim();
+      if (!/^\d{4}$/.test(pinValue)) {
+        return res.status(400).json({ message: 'PIN must be exactly 4 digits.' });
+      }
+    } else {
+      if ((newPassword || '').length < 8) {
+        return res.status(400).json({ message: 'New password must be at least 8 characters long.' });
+      }
     }
 
     const otpDoc = await PasswordResetOtp.findOne({
@@ -426,9 +443,16 @@ export const verifyPasswordResetOtp = async (req, res) => {
       });
     }
 
-    // Set new password
+    // Set new PIN or password
     const salt = await bcrypt.genSalt(10);
-    user.passwordHash = await bcrypt.hash(newPassword, salt);
+    if (isPinReset) {
+      const pinValue = String(newPin || newPassword).trim();
+      user.pinHash = await bcrypt.hash(pinValue, salt);
+      user.authType = 'pin';
+    } else {
+      user.passwordHash = await bcrypt.hash(newPassword, salt);
+      user.authType = 'password';
+    }
     await user.save();
 
     // Clean up OTPs
@@ -436,10 +460,10 @@ export const verifyPasswordResetOtp = async (req, res) => {
 
     // Record audit log
     await recordLog({
-      action: 'reset_password_otp',
+      action: isPinReset ? 'reset_pin_otp' : 'reset_password_otp',
       category: 'auth',
       actor: { username: user.username, name: user.name, role: user.role },
-      details: `Password reset via email OTP for @${user.username}`,
+      details: `${isPinReset ? '4-digit PIN' : 'Password'} reset via email OTP for @${user.username}`,
       targetId: user.username,
       targetType: 'user',
       canUndo: false
@@ -447,11 +471,14 @@ export const verifyPasswordResetOtp = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Password reset successfully! You can now sign in with your new password.'
+      authType: isPinReset ? 'pin' : 'password',
+      username: user.username,
+      name: user.name,
+      message: `${isPinReset ? 'PIN' : 'Password'} reset successfully! You can now sign in with your new ${isPinReset ? 'PIN' : 'password'}.`
     });
   } catch (err) {
     console.error('verifyPasswordResetOtp error:', err);
-    res.status(500).json({ message: err.message || 'Error resetting password.' });
+    res.status(500).json({ message: err.message || 'Error resetting credentials.' });
   }
 };
 
