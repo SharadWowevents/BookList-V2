@@ -214,3 +214,203 @@ export const testSmtpConnection = async (customConfig, testRecipient) => {
 
   return { success: true, message: 'SMTP connection verified successfully.' };
 };
+
+/**
+ * Sends an email notification when an administrator accepts a PIN or password reset request.
+ */
+export const sendResetRequestAcceptedEmail = async ({ toEmail, userName, type = 'pin', newCred, loginUrl }) => {
+  const smtpConfig = await getActiveSmtpConfig();
+  if (!smtpConfig) {
+    throw new Error('SMTP email service is not configured.');
+  }
+
+  const transporter = createSmtpTransporter(smtpConfig);
+  const fromAddress = smtpConfig.from || `"MyDeepwork" <${smtpConfig.user}>`;
+  const isPin = type === 'pin';
+  const credTitle = isPin ? '4-Digit PIN' : 'Password';
+  const resolvedLoginUrl = loginUrl || process.env.APP_URL || 'https://mydeepwork.in/login';
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your MyDeepwork ${credTitle} Has Been Reset</title>
+</head>
+<body style="margin: 0; padding: 24px; background-color: #0b0f12; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f0f3f6;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 520px; margin: 0 auto; background-color: #161b22; border-radius: 16px; border: 1px solid #30363d; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+    <!-- Header -->
+    <tr>
+      <td style="padding: 28px 32px 20px; border-bottom: 1px solid #21262d;">
+        <span style="font-size: 22px; font-weight: 800; letter-spacing: -0.02em; color: #ffffff;">
+          My<span style="color: #2ea043;">Deepwork</span>
+        </span>
+      </td>
+    </tr>
+    
+    <!-- Body Content -->
+    <tr>
+      <td style="padding: 28px 32px;">
+        <h1 style="margin: 0 0 14px; font-size: 20px; font-weight: 700; color: #ffffff; letter-spacing: -0.01em;">
+          Your ${credTitle} Has Been Reset
+        </h1>
+        <p style="margin: 0 0 20px; font-size: 15px; line-height: 1.6; color: #8b949e;">
+          Hello <strong style="color: #f0f3f6;">${userName || 'there'}</strong>,<br>
+          An administrator has approved your ${credTitle.toLowerCase()} reset request. Your account has been updated with your new ${isPin ? '4-digit PIN' : 'password'}:
+        </p>
+
+        <!-- Credential Box -->
+        <div style="background-color: #0d1117; border: 1.5px solid #2ea043; border-radius: 12px; padding: 20px 24px; text-align: center; margin: 24px 0;">
+          <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #8b949e; margin-bottom: 8px;">
+            Your New ${credTitle}
+          </div>
+          <div style="font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: ${isPin ? '36px' : '22px'}; font-weight: 800; letter-spacing: ${isPin ? '10px' : '2px'}; color: #2ea043; padding-left: ${isPin ? '10px' : '0'};">
+            ${newCred}
+          </div>
+        </div>
+
+        <div style="text-align: center; margin: 28px 0 16px;">
+          <a href="${resolvedLoginUrl}" style="background-color: #238636; color: #ffffff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-block;">
+            Sign In to MyDeepwork
+          </a>
+        </div>
+
+        <p style="margin: 20px 0 0; font-size: 12.5px; line-height: 1.5; color: #6e7681; border-top: 1px solid #21262d; padding-top: 16px;">
+          For security, keep this ${credTitle.toLowerCase()} confidential. If you did not request this reset, please contact your administrator immediately.
+        </p>
+      </td>
+    </tr>
+
+    <!-- Footer -->
+    <tr>
+      <td style="padding: 16px 32px 24px; text-align: center; font-size: 11.5px; color: #484f58;">
+        MyDeepwork · Digital Personal & Team Workspace · Secure Login
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+
+  const text = `
+MyDeepwork - Your ${credTitle} Has Been Reset
+
+Hello ${userName || 'there'},
+
+An administrator has approved your ${credTitle.toLowerCase()} reset request.
+Your new ${credTitle} is:
+
+    ${newCred}
+
+You can sign in now at: ${resolvedLoginUrl}
+
+For security, keep this credential safe. If you did not request this reset, please contact your administrator immediately.
+
+—
+MyDeepwork Team
+  `.trim();
+
+  return transporter.sendMail({
+    from: fromAddress,
+    to: toEmail,
+    subject: `Your MyDeepwork ${credTitle} Has Been Reset`,
+    text,
+    html
+  });
+};
+
+/**
+ * Sends an email notification when an administrator declines a reset request.
+ */
+export const sendResetRequestDeclinedEmail = async ({ toEmail, userName, type = 'pin', adminNote }) => {
+  const smtpConfig = await getActiveSmtpConfig();
+  if (!smtpConfig) {
+    throw new Error('SMTP email service is not configured.');
+  }
+
+  const transporter = createSmtpTransporter(smtpConfig);
+  const fromAddress = smtpConfig.from || `"MyDeepwork" <${smtpConfig.user}>`;
+  const credTitle = type === 'pin' ? '4-Digit PIN' : 'Password';
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Update on Your MyDeepwork ${credTitle} Reset Request</title>
+</head>
+<body style="margin: 0; padding: 24px; background-color: #0b0f12; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f0f3f6;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 520px; margin: 0 auto; background-color: #161b22; border-radius: 16px; border: 1px solid #30363d; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+    <!-- Header -->
+    <tr>
+      <td style="padding: 28px 32px 20px; border-bottom: 1px solid #21262d;">
+        <span style="font-size: 22px; font-weight: 800; letter-spacing: -0.02em; color: #ffffff;">
+          My<span style="color: #2ea043;">Deepwork</span>
+        </span>
+      </td>
+    </tr>
+    
+    <!-- Body Content -->
+    <tr>
+      <td style="padding: 28px 32px;">
+        <h1 style="margin: 0 0 14px; font-size: 20px; font-weight: 700; color: #ffffff; letter-spacing: -0.01em;">
+          Update on Your Reset Request
+        </h1>
+        <p style="margin: 0 0 16px; font-size: 15px; line-height: 1.6; color: #8b949e;">
+          Hello <strong style="color: #f0f3f6;">${userName || 'there'}</strong>,<br>
+          Your request to reset your MyDeepwork ${credTitle.toLowerCase()} was reviewed by an administrator and could not be approved at this time.
+        </p>
+
+        ${adminNote ? `
+        <div style="background-color: #0d1117; border-left: 3px solid #d29922; border-radius: 6px; padding: 14px 18px; margin: 20px 0;">
+          <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: #d29922; margin-bottom: 4px;">
+            Note from Administrator
+          </div>
+          <div style="font-size: 14px; color: #c9d1d9; line-height: 1.5;">
+            “${adminNote}”
+          </div>
+        </div>
+        ` : ''}
+
+        <p style="margin: 16px 0 0; font-size: 13.5px; line-height: 1.5; color: #8b949e;">
+          If you believe this is an error or still need access to your account, please contact your administrator directly.
+        </p>
+      </td>
+    </tr>
+
+    <!-- Footer -->
+    <tr>
+      <td style="padding: 16px 32px 24px; text-align: center; font-size: 11.5px; color: #484f58;">
+        MyDeepwork · Digital Personal & Team Workspace
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+
+  const text = `
+MyDeepwork - Update on Your Reset Request
+
+Hello ${userName || 'there'},
+
+Your request to reset your MyDeepwork ${credTitle.toLowerCase()} was reviewed by an administrator and could not be approved at this time.
+
+${adminNote ? `Note from Administrator: "${adminNote}"\n` : ''}
+If you believe this is an error, please contact your administrator directly.
+
+—
+MyDeepwork Team
+  `.trim();
+
+  return transporter.sendMail({
+    from: fromAddress,
+    to: toEmail,
+    subject: `Update on Your MyDeepwork ${credTitle} Reset Request`,
+    text,
+    html
+  });
+};
+

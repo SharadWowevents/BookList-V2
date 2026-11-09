@@ -15,7 +15,11 @@ import {
   updateBackupConfig
 } from '../services/backupService.js';
 import { recordLog, getLogs, undoLogEntry } from '../services/auditLogService.js';
-import { testSmtpConnection } from '../services/emailService.js';
+import {
+  testSmtpConnection,
+  sendResetRequestAcceptedEmail,
+  sendResetRequestDeclinedEmail
+} from '../services/emailService.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -732,10 +736,33 @@ export const acceptResetRequestController = async (req, res) => {
       canUndo: false
     });
 
+    // Send email with created PIN/password to user's email
+    let emailSent = false;
+    let emailError = null;
+    if (request.email) {
+      try {
+        const origin = req.get('origin') || (req.protocol + '://' + req.get('host'));
+        const loginUrl = `${origin}/login`;
+        await sendResetRequestAcceptedEmail({
+          toEmail: request.email,
+          userName: user.name || user.username || request.name,
+          type: request.type,
+          newCred,
+          loginUrl
+        });
+        emailSent = true;
+      } catch (err) {
+        console.error('sendResetRequestAcceptedEmail error:', err);
+        emailError = err.message;
+      }
+    }
+
     res.json({
       success: true,
-      message: `${request.type === 'pin' ? 'PIN' : 'Password'} reset accepted successfully!`,
+      message: `${request.type === 'pin' ? 'PIN' : 'Password'} reset accepted successfully!${emailSent ? ` An email with the new ${request.type === 'pin' ? 'PIN' : 'password'} was sent to ${request.email}.` : (emailError ? ` (Email notice: ${emailError})` : '')}`,
       newCred,
+      emailSent,
+      emailError,
       request
     });
   } catch (err) {
@@ -774,9 +801,29 @@ export const declineResetRequestController = async (req, res) => {
       canUndo: false
     });
 
+    // Send decline notification email to user's email
+    let emailSent = false;
+    let emailError = null;
+    if (request.email) {
+      try {
+        await sendResetRequestDeclinedEmail({
+          toEmail: request.email,
+          userName: request.name || request.username || request.identifier,
+          type: request.type,
+          adminNote: request.adminNote
+        });
+        emailSent = true;
+      } catch (err) {
+        console.error('sendResetRequestDeclinedEmail error:', err);
+        emailError = err.message;
+      }
+    }
+
     res.json({
       success: true,
-      message: 'Reset request declined.',
+      message: `Reset request declined.${emailSent ? ` Notification email was sent to ${request.email}.` : (emailError ? ` (Email notice: ${emailError})` : '')}`,
+      emailSent,
+      emailError,
       request
     });
   } catch (err) {

@@ -204,7 +204,9 @@ export const AdminPanel = () => {
         username: req.username || req.identifier,
         name: req.name || req.identifier,
         type: req.type,
-        email: req.email
+        email: req.email,
+        emailSent: res.emailSent,
+        emailError: res.emailError
       });
       setAcceptModal({ open: false, request: null });
       loadResetRequests();
@@ -1963,6 +1965,33 @@ export const AdminPanel = () => {
                   </span>
                 </div>
               </div>
+
+              {acceptedResult.emailSent ? (
+                <div style={{
+                  background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
+                  borderRadius: '10px',
+                  padding: '8px 12px',
+                  fontSize: '.88rem',
+                  color: 'var(--accent)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <CheckIcon size={16} />
+                  <span>Email with the new {acceptedResult.type === 'pin' ? 'PIN' : 'password'} was sent to {acceptedResult.email}.</span>
+                </div>
+              ) : acceptedResult.emailError ? (
+                <div style={{
+                  background: 'color-mix(in srgb, var(--line) 40%, transparent)',
+                  borderRadius: '10px',
+                  padding: '8px 12px',
+                  fontSize: '.82rem',
+                  color: 'var(--muted)'
+                }}>
+                  ℹ️ Email delivery note: {acceptedResult.emailError}. You can copy the credentials below to share manually.
+                </div>
+              ) : null}
 
               <button
                 type="button"
