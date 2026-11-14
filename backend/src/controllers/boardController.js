@@ -114,65 +114,70 @@ export const syncBoard = async (req, res) => {
       const currentIds = lists.map(l => l.id);
       const existingMap = new Map(existingLists.map(l => [l.id, l]));
 
-      // Log deletions
-      const deletedLists = existingLists.filter(el => !currentIds.includes(el.id));
-      for (const del of deletedLists) {
-        await recordLog({
-          action: 'delete_list',
-          category: 'lists',
-          actor: req.user,
-          details: `Deleted list '${del.name}' (${del.todos?.length || 0} items)`,
-          targetId: del.id,
-          targetType: 'list',
-          previousState: del.toObject(),
-          canUndo: true
-        });
-      }
-
-      for (let i = 0; i < lists.length; i++) {
-        const item = lists[i];
-        const prev = existingMap.get(item.id);
-
-        if (!prev) {
-          // Log creation
+      // Guard: do NOT wipe all existing lists if incoming lists array is suddenly empty
+      if (existingLists.length > 0 && currentIds.length === 0) {
+        console.warn(`[syncBoard] Prevented accidental wipe of ${existingLists.length} lists for user ${userId}`);
+      } else {
+        // Log deletions
+        const deletedLists = existingLists.filter(el => !currentIds.includes(el.id));
+        for (const del of deletedLists) {
           await recordLog({
-            action: 'create_list',
+            action: 'delete_list',
             category: 'lists',
             actor: req.user,
-            details: `Created list '${item.name || 'Untitled list'}'`,
-            targetId: item.id,
+            details: `Deleted list '${del.name}' (${del.todos?.length || 0} items)`,
+            targetId: del.id,
             targetType: 'list',
-            newState: item,
+            previousState: del.toObject(),
             canUndo: true
           });
         }
 
-        await List.findOneAndUpdate(
-          { userId, id: item.id },
-          {
-            userId,
-            id: item.id,
-            name: item.name || 'Untitled list',
-            starred: !!item.starred,
-            order: i,
-            todos: item.todos || [],
-            shared: item.shared || null
-          },
-          { upsert: true, new: true }
-        );
+        for (let i = 0; i < lists.length; i++) {
+          const item = lists[i];
+          const prev = existingMap.get(item.id);
 
-        // If this list is shared, propagate changes to Share and all collaborators
-        if (item.shared?.sid) {
-          syncShareAcrossAllUsers({
-            sid: item.shared.sid,
-            kind: 'list',
-            content: { name: item.name, todos: item.todos },
-            updatedBy: req.user?.name || 'Someone'
-          }).catch(() => {});
+          if (!prev) {
+            // Log creation
+            await recordLog({
+              action: 'create_list',
+              category: 'lists',
+              actor: req.user,
+              details: `Created list '${item.name || 'Untitled list'}'`,
+              targetId: item.id,
+              targetType: 'list',
+              newState: item,
+              canUndo: true
+            });
+          }
+
+          await List.findOneAndUpdate(
+            { userId, id: item.id },
+            {
+              userId,
+              id: item.id,
+              name: item.name || 'Untitled list',
+              starred: !!item.starred,
+              order: i,
+              todos: item.todos || [],
+              shared: item.shared || null
+            },
+            { upsert: true, new: true }
+          );
+
+          // If this list is shared, propagate changes to Share and all collaborators
+          if (item.shared?.sid) {
+            syncShareAcrossAllUsers({
+              sid: item.shared.sid,
+              kind: 'list',
+              content: { name: item.name, todos: item.todos },
+              updatedBy: req.user?.name || 'Someone'
+            }).catch(() => {});
+          }
         }
+        // Remove any list not in incoming list array
+        await List.deleteMany({ userId, id: { $nin: currentIds } });
       }
-      // Remove any list not in incoming list array
-      await List.deleteMany({ userId, id: { $nin: currentIds } });
     }
 
     // Sync notes order / metadata
@@ -181,62 +186,67 @@ export const syncBoard = async (req, res) => {
       const currentNoteIds = notes.map(n => n.id);
       const existingNoteMap = new Map(existingNotes.map(n => [n.id, n]));
 
-      // Log deleted notes
-      const deletedNotes = existingNotes.filter(en => !currentNoteIds.includes(en.id));
-      for (const del of deletedNotes) {
-        await recordLog({
-          action: 'delete_note',
-          category: 'notes',
-          actor: req.user,
-          details: `Deleted note '${del.title || 'Untitled note'}'`,
-          targetId: del.id,
-          targetType: 'note',
-          previousState: del.toObject(),
-          canUndo: true
-        });
-      }
-
-      for (let i = 0; i < notes.length; i++) {
-        const item = notes[i];
-        const prev = existingNoteMap.get(item.id);
-
-        if (!prev) {
+      // Guard: do NOT wipe all existing notes if incoming notes array is suddenly empty
+      if (existingNotes.length > 0 && currentNoteIds.length === 0) {
+        console.warn(`[syncBoard] Prevented accidental wipe of ${existingNotes.length} notes for user ${userId}`);
+      } else {
+        // Log deleted notes
+        const deletedNotes = existingNotes.filter(en => !currentNoteIds.includes(en.id));
+        for (const del of deletedNotes) {
           await recordLog({
-            action: 'create_note',
+            action: 'delete_note',
             category: 'notes',
             actor: req.user,
-            details: `Created note '${item.title || 'Untitled note'}'`,
-            targetId: item.id,
+            details: `Deleted note '${del.title || 'Untitled note'}'`,
+            targetId: del.id,
             targetType: 'note',
-            newState: item,
+            previousState: del.toObject(),
             canUndo: true
           });
         }
 
-        await Note.findOneAndUpdate(
-          { userId, id: item.id },
-          {
-            $set: {
-              title: item.title || '',
-              starred: !!item.starred,
-              order: i,
-              shared: item.shared || null
-            }
-          },
-          { upsert: true }
-        );
+        for (let i = 0; i < notes.length; i++) {
+          const item = notes[i];
+          const prev = existingNoteMap.get(item.id);
 
-        // If this note is shared, propagate title change
-        if (item.shared?.sid && item.title) {
-          syncShareAcrossAllUsers({
-            sid: item.shared.sid,
-            kind: 'note',
-            content: { title: item.title },
-            updatedBy: req.user?.name || 'Someone'
-          }).catch(() => {});
+          if (!prev) {
+            await recordLog({
+              action: 'create_note',
+              category: 'notes',
+              actor: req.user,
+              details: `Created note '${item.title || 'Untitled note'}'`,
+              targetId: item.id,
+              targetType: 'note',
+              newState: item,
+              canUndo: true
+            });
+          }
+
+          await Note.findOneAndUpdate(
+            { userId, id: item.id },
+            {
+              $set: {
+                title: item.title || '',
+                starred: !!item.starred,
+                order: i,
+                shared: item.shared || null
+              }
+            },
+            { upsert: true }
+          );
+
+          // If this note is shared, propagate title change
+          if (item.shared?.sid && item.title) {
+            syncShareAcrossAllUsers({
+              sid: item.shared.sid,
+              kind: 'note',
+              content: { title: item.title },
+              updatedBy: req.user?.name || 'Someone'
+            }).catch(() => {});
+          }
         }
+        await Note.deleteMany({ userId, id: { $nin: currentNoteIds } });
       }
-      await Note.deleteMany({ userId, id: { $nin: currentNoteIds } });
     }
 
     // Update user active state

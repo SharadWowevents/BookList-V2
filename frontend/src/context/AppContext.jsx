@@ -845,11 +845,16 @@ export const AppProvider = ({ children }) => {
   }, [getNoteKey]);
 
   // Board sync helpers & immediate sync
+  const initialBoardLoadedRef = useRef(false);
   const boardSyncTimer = useRef(null);
   const pendingBoardSyncRef = useRef(null);
 
   const syncBoardToBackendNow = useCallback((boardToSync) => {
     if (!getToken() || !boardToSync) return;
+    if (!initialBoardLoadedRef.current && session) {
+      // Guard: do not sync to backend until initial board has loaded from server
+      return;
+    }
     clearTimeout(boardSyncTimer.current);
     boardSyncTimer.current = null;
     pendingBoardSyncRef.current = null;
@@ -860,7 +865,7 @@ export const AppProvider = ({ children }) => {
       activeNoteId: boardToSync.activeNoteId,
       tab: boardToSync.tab
     }).catch(() => {});
-  }, []);
+  }, [session]);
 
   const updateBoard = useCallback((updates, immediate = false) => {
     setBoardState(prev => {
@@ -895,6 +900,7 @@ export const AppProvider = ({ children }) => {
     pendingBoardSyncRef.current = null;
     try {
       const remoteBoard = await boardAPI.getBoard();
+      initialBoardLoadedRef.current = true;
       if (remoteBoard && Array.isArray(remoteBoard.lists)) {
         const normalized = normalizeBoard(remoteBoard);
         setBoardState(normalized);
@@ -1291,6 +1297,7 @@ export const AppProvider = ({ children }) => {
 
           // Fetch board from MongoDB
           boardAPI.getBoard().then(remoteBoard => {
+            initialBoardLoadedRef.current = true;
             let normalized = (remoteBoard && Array.isArray(remoteBoard.lists))
               ? normalizeBoard(remoteBoard)
               : null;
@@ -1363,6 +1370,7 @@ export const AppProvider = ({ children }) => {
         // Fetch user board from backend and process any pending share
         if (getToken()) {
           boardAPI.getBoard().then(remoteBoard => {
+            initialBoardLoadedRef.current = true;
             let activeBoard = b;
             if (remoteBoard && Array.isArray(remoteBoard.lists)) {
               activeBoard = normalizeBoard(remoteBoard);
