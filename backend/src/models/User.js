@@ -56,7 +56,8 @@ const userSchema = new mongoose.Schema({
   prefs: {
     accent: { type: String, default: 'green' },
     theme: { type: String, default: 'auto' },
-    collapsed: { type: Boolean, default: false }
+    collapsed: { type: Boolean, default: false },
+    sidebarWidth: { type: Number, default: 320 }
   },
   activeId: {
     type: String,

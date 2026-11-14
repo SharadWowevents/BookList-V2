@@ -18,10 +18,94 @@ export const Sidebar = () => {
     showToast,
     crmMembers, crmFilter, setCrmFilter, isCrmAllowed,
     journalYears, journalViewMode, setJournalViewMode, setJournalCenter, setJournalMonth,
-    navigate, openPrivacyPolicy, foldMode
+    navigate, openPrivacyPolicy, foldMode,
+    sidebarWidth, setSidebarWidth, setSidebarWidthState
   } = useApp();
 
   const isAdmin = session?.role === 'admin';
+
+  // Sidebar drag to resize
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handlePointerDown = (e) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    setIsDragging(true);
+    document.body.classList.add('is-resizing-sidebar');
+
+    const onPointerMove = (moveEvent) => {
+      moveEvent.preventDefault();
+      const minW = 240;
+      const maxW = Math.min(650, Math.round(window.innerWidth * 0.65));
+      const targetWidth = Math.max(minW, Math.min(Math.round(moveEvent.clientX), maxW));
+
+      document.documentElement.style.setProperty('--sidebar-width', `${targetWidth}px`);
+      setSidebarWidthState(targetWidth);
+    };
+
+    const onPointerUp = (upEvent) => {
+      document.body.classList.remove('is-resizing-sidebar');
+      setIsDragging(false);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+
+      const minW = 240;
+      const maxW = Math.min(650, Math.round(window.innerWidth * 0.65));
+      const finalWidth = Math.max(minW, Math.min(Math.round(upEvent.clientX), maxW));
+      setSidebarWidth(finalWidth);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+  };
+
+  const handleRailPointerDown = (e) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    document.body.classList.add('is-resizing-sidebar');
+    let hasExpanded = false;
+
+    const onMove = (moveEvt) => {
+      if (moveEvt.clientX >= 140) {
+        if (!hasExpanded) {
+          hasExpanded = true;
+          setCollapsed(false);
+        }
+        const minW = 240;
+        const maxW = Math.min(650, Math.round(window.innerWidth * 0.65));
+        const targetWidth = Math.max(minW, Math.min(Math.round(moveEvt.clientX), maxW));
+        document.documentElement.style.setProperty('--sidebar-width', `${targetWidth}px`);
+        setSidebarWidthState(targetWidth);
+      }
+    };
+
+    const onUp = (upEvt) => {
+      document.body.classList.remove('is-resizing-sidebar');
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      if (upEvt.clientX >= 140) {
+        setSidebarWidth(upEvt.clientX);
+      }
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
+
+  const handleDoubleClick = (e) => {
+    e.preventDefault();
+    setSidebarWidth(320);
+    document.documentElement.style.setProperty('--sidebar-width', '320px');
+    showToast('Sidebar reset to default width.');
+  };
 
   const [newListName, setNewListName] = useState('');
   const menuRef = useRef(null);
@@ -726,6 +810,14 @@ export const Sidebar = () => {
           {renderAvatar()}
         </button>
         {menuDropdown}
+        <div
+          className="side-resizer"
+          onPointerDown={handleRailPointerDown}
+          title="Drag right to expand sidebar"
+          aria-label="Expand sidebar"
+          role="separator"
+          aria-orientation="vertical"
+        />
       </aside>
     );
   }
@@ -913,6 +1005,15 @@ export const Sidebar = () => {
       </div>
 
       {menuDropdown}
+      <div
+        className={`side-resizer ${isDragging ? 'dragging' : ''}`}
+        onPointerDown={handlePointerDown}
+        onDoubleClick={handleDoubleClick}
+        title="Drag to resize sidebar (Double-click to reset)"
+        aria-label="Resize sidebar"
+        role="separator"
+        aria-orientation="vertical"
+      />
     </aside>
   );
 };

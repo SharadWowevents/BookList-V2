@@ -120,6 +120,38 @@ export const AppProvider = ({ children }) => {
     }
   });
 
+  // Resizable sidebar width persistence
+  const [sidebarWidth, setSidebarWidthState] = useState(() => {
+    try {
+      const val = localStorage.getItem('listbook:sidebar_width');
+      if (val) {
+        const parsed = Number(JSON.parse(val));
+        if (parsed >= 240 && parsed <= 650) return parsed;
+      }
+      return 320;
+    } catch {
+      return 320;
+    }
+  });
+
+  const setSidebarWidth = useCallback((newW) => {
+    const minW = 240;
+    const maxW = Math.min(650, Math.round(window.innerWidth * 0.65));
+    const clamped = Math.max(minW, Math.min(Math.round(newW), maxW));
+    setSidebarWidthState(clamped);
+    try {
+      localStorage.setItem('listbook:sidebar_width', JSON.stringify(clamped));
+      document.documentElement.style.setProperty('--sidebar-width', `${clamped}px`);
+    } catch {}
+    if (getToken()) {
+      authAPI.updateProfile({ prefs: { sidebarWidth: clamped } }).catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--sidebar-width', `${sidebarWidth}px`);
+  }, [sidebarWidth]);
+
   // Dual-screen and foldable device detection (Surface Duo & Viewport Segments API)
   const [foldMode, setFoldMode] = useState('none');
 
@@ -1295,6 +1327,18 @@ export const AppProvider = ({ children }) => {
             setAccent(res.user.prefs.accent);
           }
 
+          const localWidth = localStorage.getItem('listbook:sidebar_width');
+          if (localWidth) {
+            try {
+              const parsed = JSON.parse(localWidth);
+              if (parsed && parsed !== res.user.prefs?.sidebarWidth) {
+                authAPI.updateProfile({ prefs: { sidebarWidth: parsed } }).catch(() => {});
+              }
+            } catch {}
+          } else if (res.user.prefs?.sidebarWidth) {
+            setSidebarWidth(res.user.prefs.sidebarWidth);
+          }
+
           // Fetch board from MongoDB
           boardAPI.getBoard().then(remoteBoard => {
             initialBoardLoadedRef.current = true;
@@ -1489,7 +1533,10 @@ export const AppProvider = ({ children }) => {
       openPrivacyPolicy,
       closePrivacyPolicy,
       acceptPrivacyPolicy,
-      foldMode
+      foldMode,
+      sidebarWidth,
+      setSidebarWidth,
+      setSidebarWidthState
     }}>
       {children}
     </AppContext.Provider>

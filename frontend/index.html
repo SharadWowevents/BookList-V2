@@ -32,6 +32,13 @@
             try { a = JSON.parse(a); } catch(e) {}
             if (a) document.documentElement.setAttribute('data-accent', a);
           }
+          var sw = localStorage.getItem('listbook:sidebar_width');
+          if (sw) {
+            try { sw = JSON.parse(sw); } catch(e) {}
+            if (sw && sw >= 240 && sw <= 650) {
+              document.documentElement.style.setProperty('--sidebar-width', sw + 'px');
+            }
+          }
         } catch(e) {}
       })();
     </script>
