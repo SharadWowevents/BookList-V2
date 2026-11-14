@@ -86,9 +86,9 @@ svg{display:block}
 /* ---------- app shell ---------- */
 .app{height:100%;display:grid;grid-template-columns:var(--sidebar-width,320px) minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
 .side{position:relative;min-width:0;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
-.side-resizer{position:absolute;top:0;right:-5px;width:10px;height:100%;cursor:col-resize;z-index:25;touch-action:none;user-select:none;-webkit-user-select:none}
-.side-resizer::after{content:"";position:absolute;top:0;bottom:0;left:4px;width:2px;background:transparent;transition:background .15s ease}
-.side-resizer:hover::after,.side-resizer.dragging::after{background:var(--accent)}
+.side-resizer{position:absolute;top:0;right:-8px;width:18px;height:100%;cursor:col-resize;z-index:40;touch-action:none;user-select:none;-webkit-user-select:none}
+.side-resizer::after{content:"";position:absolute;top:0;bottom:0;left:8px;width:2px;background:var(--line);opacity:.6;transition:background .15s ease,opacity .15s ease,width .15s ease}
+.side-resizer:hover::after,.side-resizer.dragging::after{background:var(--accent);opacity:1;width:3px}
 body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;user-select:none!important;-webkit-user-select:none!important}
 .main{display:flex;flex-direction:column;min-height:0;min-width:0}
 .side-head{padding-block:22px 14px;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:20px;display:flex;flex-direction:column;gap:14px;border-bottom:1px solid var(--line)}
@@ -421,7 +421,7 @@ body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;
   .app.collapsed .main{display:flex!important}
   .back{display:grid;margin-left:-10px;margin-top:4px}
   .collapse-btn{display:grid!important}
-  .side-resizer{display:none!important}
+  .side-resizer{display:block!important}
   .side-head{padding-right:max(16px,env(safe-area-inset-right,0px))}
   .lists{padding-right:max(10px,env(safe-area-inset-right,0px))}
   .list-open{font-size:1.5rem}
@@ -442,12 +442,89 @@ body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;
   .note-scroll{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
 }
 
+/* Tablet & unfolded fold phones (e.g. Galaxy Z Fold unfolded) */
+@media (min-width:720px) and (max-width:960px){
+  .app:not(.collapsed){grid-template-columns:var(--sidebar-width,300px) minmax(0,1fr)!important}
+  .app:not(.collapsed) .side{display:flex!important;position:relative!important;width:100%!important;border-right:1px solid var(--line)!important;z-index:auto!important}
+  .app:not(.collapsed) .main{display:flex!important}
+}
+
 /* ---------- Foldable Phone Floating Side Rail & Off-Canvas Drawer ---------- */
 .fold-side-rail{display:none}
 .fold-drawer-backdrop{display:none}
 .fold-drawer-close{display:none}
 
-@media (max-width:960px){
+.fold-rail-btn{
+  width:42px;
+  height:42px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  color:var(--ink);
+  position:relative;
+  background:transparent;
+  cursor:pointer;
+  transition:background .15s ease,color .15s ease,transform .12s ease;
+}
+.fold-rail-btn:hover{
+  background:var(--soft);
+}
+.fold-rail-btn:active{
+  transform:scale(0.92);
+}
+.fold-rail-btn.active{
+  background:var(--accent);
+  color:var(--accent-ink,#fff);
+  box-shadow:0 4px 14px color-mix(in srgb,var(--accent) 35%,transparent);
+}
+.fold-rail-btn.fold-rail-del:hover,
+.fold-rail-btn.fold-rail-del.active{
+  background:rgba(239,68,68,.15)!important;
+  color:var(--danger,#ef4444)!important;
+}
+.fold-rail-badge{
+  position:absolute;
+  top:4px;
+  right:4px;
+  font-size:.65rem;
+  font-weight:700;
+  min-width:16px;
+  height:16px;
+  line-height:16px;
+  text-align:center;
+  border-radius:999px;
+  background:var(--accent);
+  color:var(--accent-ink,#fff);
+  padding:0 3px;
+}
+.fold-rail-btn.active .fold-rail-badge{
+  background:var(--ink);
+  color:var(--bg);
+}
+.fold-rail-sep{
+  width:22px;
+  height:1px;
+  background:var(--line);
+  margin:2px 0;
+  flex:none;
+}
+.fold-rail-add{
+  background:var(--accent);
+  color:var(--accent-ink,#fff);
+}
+.fold-rail-add:hover{
+  filter:brightness(1.1);
+}
+.main.inking .fold-side-rail{
+  opacity:.25;
+  pointer-events:none;
+}
+
+@media (max-width:960px),
+       (horizontal-viewport-segments: 2),
+       (vertical-viewport-segments: 2),
+       (screen-spanning: single-fold-vertical),
+       ((min-width: 1100px) and (max-width: 1120px) and (min-height: 680px) and (max-height: 760px)) {
   .fold-side-rail,
   .app.viewing .fold-side-rail,
   .app.collapsed .fold-side-rail{
@@ -456,80 +533,20 @@ body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;
     align-items:center;
     gap:6px;
     position:fixed;
-    right:max(10px,env(safe-area-inset-right,0px));
+    right:max(14px,env(safe-area-inset-right,0px));
     bottom:calc(20px + env(safe-area-inset-bottom,0px));
-    z-index:45;
+    z-index:50;
     padding:8px 6px;
-    border-radius:30px;
-    background:color-mix(in srgb,var(--panel) 84%,transparent);
+    border-radius:32px;
+    background:color-mix(in srgb,var(--panel) 86%,transparent);
     backdrop-filter:blur(20px);
     -webkit-backdrop-filter:blur(20px);
     border:1px solid var(--line);
-    box-shadow:0 10px 32px rgba(0,0,0,.18),0 2px 8px rgba(0,0,0,.08);
+    box-shadow:0 10px 32px rgba(0,0,0,.22),0 2px 8px rgba(0,0,0,.08);
     transition:bottom .22s cubic-bezier(0.16,1,0.3,1),opacity .2s ease,transform .2s ease;
   }
   .app[data-tab="lists"] .fold-side-rail{
     bottom:calc(88px + env(safe-area-inset-bottom,0px))!important;
-  }
-  .fold-rail-btn{
-    width:44px;
-    height:44px;
-    border-radius:50%;
-    display:grid;
-    place-items:center;
-    color:var(--ink);
-    position:relative;
-    background:transparent;
-    transition:background .15s ease,color .15s ease,transform .12s ease;
-  }
-  .fold-rail-btn:hover{
-    background:var(--soft);
-  }
-  .fold-rail-btn:active{
-    transform:scale(0.92);
-  }
-  .fold-rail-btn.active{
-    background:var(--accent);
-    color:var(--accent-ink);
-    box-shadow:0 4px 14px color-mix(in srgb,var(--accent) 35%,transparent);
-  }
-  .fold-rail-badge{
-    position:absolute;
-    top:4px;
-    right:4px;
-    font-size:.65rem;
-    font-weight:700;
-    min-width:16px;
-    height:16px;
-    line-height:16px;
-    text-align:center;
-    border-radius:999px;
-    background:var(--accent);
-    color:var(--accent-ink);
-    padding:0 3px;
-  }
-  .fold-rail-btn.active .fold-rail-badge{
-    background:var(--ink);
-    color:var(--bg);
-  }
-  .fold-rail-sep{
-    width:22px;
-    height:1px;
-    background:var(--line);
-    margin:2px 0;
-    flex:none;
-  }
-  .fold-rail-add{
-    background:var(--soft);
-    color:var(--ink);
-  }
-  .fold-rail-add:hover{
-    background:var(--ink);
-    color:var(--bg);
-  }
-  .main.inking .fold-side-rail{
-    opacity:.25;
-    pointer-events:none;
   }
   .app.drawer-open .side,
   .app.viewing.drawer-open .side{
@@ -538,7 +555,7 @@ body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;
     top:0!important;
     left:0!important;
     bottom:0!important;
-    width:min(340px,86vw)!important;
+    width:min(var(--sidebar-width,340px),88vw)!important;
     z-index:55!important;
     box-shadow:6px 0 36px rgba(0,0,0,.35)!important;
     border-right:1px solid var(--line)!important;
@@ -558,6 +575,29 @@ body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;
     display:grid;
     place-items:center;
   }
+}
+
+[data-fold="dual-vertical"] .fold-side-rail,
+[data-fold="dual-horizontal"] .fold-side-rail{
+  display:flex!important;
+  flex-direction:column;
+  align-items:center;
+  gap:6px;
+  position:fixed;
+  right:max(14px,env(safe-area-inset-right,0px));
+  bottom:calc(20px + env(safe-area-inset-bottom,0px));
+  z-index:50;
+  padding:8px 6px;
+  border-radius:32px;
+  background:color-mix(in srgb,var(--panel) 86%,transparent);
+  backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+  border:1px solid var(--line);
+  box-shadow:0 10px 32px rgba(0,0,0,.22),0 2px 8px rgba(0,0,0,.08);
+}
+[data-fold="dual-vertical"] .app[data-tab="lists"] .fold-side-rail,
+[data-fold="dual-horizontal"] .app[data-tab="lists"] .fold-side-rail{
+  bottom:calc(88px + env(safe-area-inset-bottom,0px))!important;
 }
 
 @keyframes foldDrawerSlideIn{
@@ -638,7 +678,7 @@ body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;
   .app.viewing,
   .app.collapsed {
     display: grid !important;
-    grid-template-columns: env(viewport-segment-width 0 0, var(--fold-seg0-w, 540px)) env(viewport-segment-width 1 0, var(--fold-seg1-w, 540px)) !important;
+    grid-template-columns: var(--sidebar-width, env(viewport-segment-width 0 0, var(--fold-seg0-w, 540px))) minmax(0, 1fr) !important;
     column-gap: calc(env(viewport-segment-left 1 0, var(--fold-seg1-x, 574px)) - env(viewport-segment-right 0 0, var(--fold-seg0-w, 540px))) !important;
     grid-template-rows: minmax(0, 1fr) !important;
     width: 100vw !important;
@@ -780,7 +820,7 @@ body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;
 [data-fold="dual-vertical"] .app.viewing,
 [data-fold="dual-vertical"] .app.collapsed {
   display: grid !important;
-  grid-template-columns: var(--fold-seg0-w, 540px) var(--fold-seg1-w, 540px) !important;
+  grid-template-columns: var(--sidebar-width, var(--fold-seg0-w, 540px)) minmax(0, 1fr) !important;
   column-gap: var(--fold-seam-w, 34px) !important;
   grid-template-rows: minmax(0, 1fr) !important;
   width: 100vw !important;

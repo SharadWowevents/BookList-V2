@@ -135,8 +135,11 @@ export const AppProvider = ({ children }) => {
   });
 
   const setSidebarWidth = useCallback((newW) => {
-    const minW = 240;
-    const maxW = Math.min(650, Math.round(window.innerWidth * 0.65));
+    const winW = window.innerWidth;
+    const minW = winW <= 600 ? Math.min(180, winW - 60) : 200;
+    const maxW = winW <= 600 
+      ? Math.min(Math.round(winW * 0.88), 480) 
+      : Math.max(540, Math.min(680, Math.round(winW * 0.75)));
     const clamped = Math.max(minW, Math.min(Math.round(newW), maxW));
     setSidebarWidthState(clamped);
     try {

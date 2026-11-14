@@ -33,33 +33,54 @@ export const Sidebar = () => {
     e.preventDefault();
     e.stopPropagation();
 
+    try {
+      e.target.setPointerCapture(e.pointerId);
+    } catch {}
+
     setIsDragging(true);
     document.body.classList.add('is-resizing-sidebar');
 
+    const getBounds = () => {
+      const winW = window.innerWidth;
+      if (winW <= 600) {
+        return {
+          minW: Math.min(180, winW - 60),
+          maxW: Math.min(Math.round(winW * 0.88), 480)
+        };
+      }
+      return {
+        minW: 200,
+        maxW: Math.max(540, Math.min(680, Math.round(winW * 0.75)))
+      };
+    };
+
     const onPointerMove = (moveEvent) => {
       moveEvent.preventDefault();
-      const minW = 240;
-      const maxW = Math.min(650, Math.round(window.innerWidth * 0.65));
-      const targetWidth = Math.max(minW, Math.min(Math.round(moveEvent.clientX), maxW));
+      const { minW, maxW } = getBounds();
+      const clientX = moveEvent.clientX;
+      const targetWidth = Math.max(minW, Math.min(Math.round(clientX), maxW));
 
       document.documentElement.style.setProperty('--sidebar-width', `${targetWidth}px`);
       setSidebarWidthState(targetWidth);
     };
 
     const onPointerUp = (upEvent) => {
+      try {
+        e.target.releasePointerCapture(e.pointerId);
+      } catch {}
       document.body.classList.remove('is-resizing-sidebar');
       setIsDragging(false);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('pointercancel', onPointerUp);
 
-      const minW = 240;
-      const maxW = Math.min(650, Math.round(window.innerWidth * 0.65));
-      const finalWidth = Math.max(minW, Math.min(Math.round(upEvent.clientX), maxW));
+      const { minW, maxW } = getBounds();
+      const clientX = upEvent.clientX;
+      const finalWidth = Math.max(minW, Math.min(Math.round(clientX), maxW));
       setSidebarWidth(finalWidth);
     };
 
-    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointermove', onPointerMove, { passive: false });
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);
   };
@@ -69,8 +90,26 @@ export const Sidebar = () => {
     e.preventDefault();
     e.stopPropagation();
 
+    try {
+      e.target.setPointerCapture(e.pointerId);
+    } catch {}
+
     document.body.classList.add('is-resizing-sidebar');
     let hasExpanded = false;
+
+    const getBounds = () => {
+      const winW = window.innerWidth;
+      if (winW <= 600) {
+        return {
+          minW: Math.min(180, winW - 60),
+          maxW: Math.min(Math.round(winW * 0.88), 480)
+        };
+      }
+      return {
+        minW: 200,
+        maxW: Math.max(540, Math.min(680, Math.round(winW * 0.75)))
+      };
+    };
 
     const onMove = (moveEvt) => {
       if (moveEvt.clientX >= 140) {
@@ -78,8 +117,7 @@ export const Sidebar = () => {
           hasExpanded = true;
           setCollapsed(false);
         }
-        const minW = 240;
-        const maxW = Math.min(650, Math.round(window.innerWidth * 0.65));
+        const { minW, maxW } = getBounds();
         const targetWidth = Math.max(minW, Math.min(Math.round(moveEvt.clientX), maxW));
         document.documentElement.style.setProperty('--sidebar-width', `${targetWidth}px`);
         setSidebarWidthState(targetWidth);
@@ -87,25 +125,31 @@ export const Sidebar = () => {
     };
 
     const onUp = (upEvt) => {
+      try {
+        e.target.releasePointerCapture(e.pointerId);
+      } catch {}
       document.body.classList.remove('is-resizing-sidebar');
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
       if (upEvt.clientX >= 140) {
-        setSidebarWidth(upEvt.clientX);
+        const { minW, maxW } = getBounds();
+        const finalWidth = Math.max(minW, Math.min(Math.round(upEvt.clientX), maxW));
+        setSidebarWidth(finalWidth);
       }
     };
 
-    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointermove', onMove, { passive: false });
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
   };
 
   const handleDoubleClick = (e) => {
     e.preventDefault();
-    setSidebarWidth(320);
-    document.documentElement.style.setProperty('--sidebar-width', '320px');
-    showToast('Sidebar reset to default width.');
+    const defaultW = foldMode === 'dual-vertical' ? 540 : 320;
+    setSidebarWidth(defaultW);
+    document.documentElement.style.setProperty('--sidebar-width', `${defaultW}px`);
+    showToast(`Sidebar width reset to ${defaultW}px.`);
   };
 
   const [newListName, setNewListName] = useState('');

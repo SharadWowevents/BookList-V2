@@ -1,5 +1,5 @@
 import { useApp } from '../context/AppContext';
-import { ListsIcon, NotesIcon, JournalIcon, CrmIcon, FolderIcon, PlusIcon } from './Icons';
+import { ListsIcon, NotesIcon, JournalIcon, CrmIcon, FolderIcon, PlusIcon, TrashIcon, ShareIcon } from './Icons';
 import { uid } from '../utils/constants';
 
 export const FoldSideRail = () => {
@@ -54,8 +54,16 @@ export const FoldSideRail = () => {
     navigate('/crm');
   };
 
+  const handleDeleteClick = () => {
+    setUi(prev => ({ ...prev, confirm: !prev.confirm, sharing: false }));
+  };
+
   const handleFolderClick = () => {
     setUi(prev => ({ ...prev, drawer: !prev.drawer }));
+  };
+
+  const handleShareClick = () => {
+    setUi(prev => ({ ...prev, sharing: !prev.sharing, confirm: false }));
   };
 
   const handleAddClick = () => {
@@ -87,7 +95,7 @@ export const FoldSideRail = () => {
         type="button"
         className={`fold-rail-btn ${isListActive ? 'active' : ''}`}
         onClick={handleListsClick}
-        title="Lists (Tap again to browse all lists)"
+        title="Lists"
         aria-label="Lists"
       >
         <ListsIcon size={20} />
@@ -97,7 +105,7 @@ export const FoldSideRail = () => {
         type="button"
         className={`fold-rail-btn ${isNotesActive ? 'active' : ''}`}
         onClick={handleNotesClick}
-        title="Notes (Tap again to browse all notes)"
+        title="Notes"
         aria-label="Notes"
       >
         <NotesIcon size={20} />
@@ -132,12 +140,32 @@ export const FoldSideRail = () => {
 
       <button
         type="button"
+        className={`fold-rail-btn fold-rail-del ${ui.confirm ? 'active' : ''}`}
+        onClick={handleDeleteClick}
+        title="Delete current item"
+        aria-label="Delete"
+      >
+        <TrashIcon size={19} />
+      </button>
+
+      <button
+        type="button"
         className={`fold-rail-btn ${ui.drawer ? 'active' : ''}`}
         onClick={handleFolderClick}
-        title="All lists & notes"
-        aria-label="Browse all lists and notes"
+        title="Folder / All lists & notes"
+        aria-label="Folder / Browse all"
       >
-        <FolderIcon size={20} />
+        <FolderIcon size={19} />
+      </button>
+
+      <button
+        type="button"
+        className={`fold-rail-btn ${ui.sharing ? 'active' : ''}`}
+        onClick={handleShareClick}
+        title="Share"
+        aria-label="Share"
+      >
+        <ShareIcon size={19} />
       </button>
 
       <button
