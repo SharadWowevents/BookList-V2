@@ -451,7 +451,6 @@ body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;
 
 /* ---------- Foldable Phone Off-Canvas Drawer ---------- */
 .fold-drawer-backdrop{display:none}
-.fold-drawer-close{display:none}
 
 @media (max-width:960px){
   .app.drawer-open .side,
@@ -476,10 +475,6 @@ body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;
     -webkit-backdrop-filter:blur(2px);
     z-index:54;
     animation:foldBackdropFade .2s ease;
-  }
-  .fold-drawer-close{
-    display:grid;
-    place-items:center;
   }
 }
 

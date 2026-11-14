@@ -42,7 +42,7 @@ const formatFullDate = (date) => {
 };
 
 export const AdminPanel = () => {
-  const { setUi, showToast, session, board, navigate, reloadBoard, saveNoteBody, loadCrmMembers } = useApp();
+  const { setUi, showToast, session, board, navigate, reloadBoard, saveNoteBody, loadCrmMembers, lastWorkspaceTab } = useApp();
 
   useEffect(() => {
     if (session?.role !== 'admin') {
@@ -588,8 +588,8 @@ export const AdminPanel = () => {
           id="back"
           aria-label="Back"
           onClick={() => {
-            setUi(prev => ({ ...prev, admin: false }));
-            navigate('/' + (board?.tab || 'notes'));
+            setUi(prev => ({ ...prev, admin: false, viewing: true }));
+            navigate('/' + (lastWorkspaceTab || board?.tab || 'notes'), { replace: true });
           }}
         >
           <BackIcon />

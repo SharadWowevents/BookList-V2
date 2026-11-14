@@ -6,8 +6,7 @@ import { ACCENTS, uid, reorderSubset, PLANS, LABELS, crmMatches } from '../utils
 import {
   PlusIcon, StarIcon, GripIcon, PanelIcon, ListPlusIcon, NotePlusIcon,
   ListsIcon, NotesIcon, GearIcon, SunIcon, MoonIcon, MonitorIcon,
-  LogoutIcon, ShieldIcon, CameraIcon, EyeIcon, UsersIcon, CrmIcon, JournalIcon, ArchetypeIcon, MailIcon,
-  XIcon
+  LogoutIcon, ShieldIcon, CameraIcon, EyeIcon, UsersIcon, CrmIcon, JournalIcon, ArchetypeIcon, MailIcon
 } from './Icons';
 import { mmdd, today0, jHas, moodName } from './JournalView';
 
@@ -213,7 +212,7 @@ export const Sidebar = () => {
     });
     setNewListName('');
     setUi(prev => ({ ...prev, adding: false, viewing: true, admin: false }));
-    navigate('/lists');
+    navigate('/lists', { replace: true });
   };
 
   const handleAddNote = () => {
@@ -224,7 +223,7 @@ export const Sidebar = () => {
       tab: 'notes'
     });
     setUi(prev => ({ ...prev, adding: false, viewing: true, admin: false }));
-    navigate('/notes');
+    navigate('/notes', { replace: true });
   };
 
   const toggleStar = (e, item, kind) => {
@@ -359,8 +358,11 @@ export const Sidebar = () => {
               [isList ? 'activeId' : 'activeNoteId']: item.id,
               tab: isList ? 'lists' : 'notes'
             });
+            if (window.innerWidth <= 960 && !window.history.state?.modalView) {
+              try { window.history.pushState({ modalView: true }, '', isList ? '/lists' : '/notes'); } catch {}
+            }
             setUi(prev => ({ ...prev, viewing: true, drawer: false, admin: false, confirm: false, sharing: false, publishing: false }));
-            navigate(isList ? '/lists' : '/notes');
+            navigate(isList ? '/lists' : '/notes', { replace: true });
           }}
         >
           <span className="grip" aria-hidden="true" title="Drag to reorder"><GripIcon /></span>
@@ -615,6 +617,9 @@ export const Sidebar = () => {
             } else {
               setCrmFilter({ kind: fl.kind });
             }
+            if (window.innerWidth <= 960 && !window.history.state?.modalView) {
+              try { window.history.pushState({ modalView: true }, '', '/crm'); } catch {}
+            }
             setUi(prev => ({ ...prev, viewing: true, drawer: false }));
           }}
         >
@@ -783,7 +788,7 @@ export const Sidebar = () => {
           onClick={() => {
             updateBoard({ tab: 'lists' });
             setUi(prev => ({ ...prev, admin: false }));
-            navigate('/lists');
+            navigate('/lists', { replace: true });
           }}
         >
           <ListsIcon />
@@ -796,7 +801,7 @@ export const Sidebar = () => {
           onClick={() => {
             updateBoard({ tab: 'notes' });
             setUi(prev => ({ ...prev, admin: false }));
-            navigate('/notes');
+            navigate('/notes', { replace: true });
           }}
         >
           <NotesIcon />
@@ -809,7 +814,7 @@ export const Sidebar = () => {
           onClick={() => {
             updateBoard({ tab: 'journal' });
             setUi(prev => ({ ...prev, admin: false }));
-            navigate('/journal');
+            navigate('/journal', { replace: true });
           }}
         >
           <JournalIcon />
@@ -823,7 +828,7 @@ export const Sidebar = () => {
             onClick={() => {
               updateBoard({ tab: 'crm' });
               setUi(prev => ({ ...prev, admin: false }));
-              navigate('/crm');
+              navigate('/crm', { replace: true });
             }}
           >
             <CrmIcon />
@@ -883,7 +888,7 @@ export const Sidebar = () => {
               onClick={() => {
                 updateBoard({ tab: 'lists' });
                 setUi(prev => ({ ...prev, adding: !prev.adding, admin: false }));
-                navigate('/lists');
+                navigate('/lists', { replace: true });
               }}
             >
               <ListPlusIcon />
@@ -925,17 +930,6 @@ export const Sidebar = () => {
             >
               <PanelIcon />
             </button>
-            {ui.drawer && (
-              <button
-                type="button"
-                className="hbtn fold-drawer-close"
-                onClick={() => setUi(prev => ({ ...prev, drawer: false }))}
-                title="Close drawer"
-                aria-label="Close drawer"
-              >
-                <XIcon size={20} />
-              </button>
-            )}
           </div>
         </div>
 
@@ -973,7 +967,7 @@ export const Sidebar = () => {
             onClick={() => {
               updateBoard({ tab: 'lists' });
               setUi(prev => ({ ...prev, admin: false, adding: false }));
-              navigate('/lists');
+              navigate('/lists', { replace: true });
             }}
           >
             <ListsIcon />
@@ -987,7 +981,7 @@ export const Sidebar = () => {
             onClick={() => {
               updateBoard({ tab: 'notes' });
               setUi(prev => ({ ...prev, admin: false, adding: false }));
-              navigate('/notes');
+              navigate('/notes', { replace: true });
             }}
           >
             <NotesIcon />
@@ -1001,7 +995,7 @@ export const Sidebar = () => {
             onClick={() => {
               updateBoard({ tab: 'journal' });
               setUi(prev => ({ ...prev, admin: false, adding: false }));
-              navigate('/journal');
+              navigate('/journal', { replace: true });
             }}
             title="Journal"
             aria-label="Journal"
@@ -1017,7 +1011,7 @@ export const Sidebar = () => {
               onClick={() => {
                 updateBoard({ tab: 'crm' });
                 setUi(prev => ({ ...prev, admin: false, adding: false }));
-                navigate('/crm');
+                navigate('/crm', { replace: true });
               }}
             >
               <CrmIcon />

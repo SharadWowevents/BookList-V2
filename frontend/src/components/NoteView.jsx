@@ -673,7 +673,13 @@ export const NoteView = () => {
     return (
       <>
         <div className="main-head">
-          <button className="icon-btn back" onClick={() => setUi(prev => ({ ...prev, viewing: false }))}>
+          <button className="icon-btn back" onClick={() => {
+            if (window.history.state?.modalView) {
+              window.history.back();
+            } else {
+              setUi(prev => ({ ...prev, viewing: false }));
+            }
+          }}>
             <BackIcon />
           </button>
         </div>
@@ -1200,7 +1206,13 @@ ${pubAuthor ? `<div class="by">${avatarHtml}<span><b>${name}</b>${when ? ` • L
           className="icon-btn back"
           id="back"
           aria-label="Back to notes"
-          onClick={() => setUi(prev => ({ ...prev, viewing: false }))}
+          onClick={() => {
+            if (window.history.state?.modalView) {
+              window.history.back();
+            } else {
+              setUi(prev => ({ ...prev, viewing: false }));
+            }
+          }}
         >
           <BackIcon />
         </button>

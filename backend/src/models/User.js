@@ -69,7 +69,7 @@ const userSchema = new mongoose.Schema({
   },
   tab: {
     type: String,
-    enum: ['lists', 'notes', 'crm'],
+    enum: ['lists', 'notes', 'crm', 'journal'],
     default: 'lists'
   },
   lastSeen: {

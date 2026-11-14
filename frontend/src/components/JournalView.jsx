@@ -291,7 +291,13 @@ export const JournalView = () => {
           className="icon-btn back"
           id="back"
           aria-label="Back to sidebar"
-          onClick={() => setUi(prev => ({ ...prev, viewing: false }))}
+          onClick={() => {
+            if (window.history.state?.modalView) {
+              window.history.back();
+            } else {
+              setUi(prev => ({ ...prev, viewing: false }));
+            }
+          }}
         >
           <BackIcon />
         </button>

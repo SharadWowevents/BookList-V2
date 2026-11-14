@@ -254,9 +254,23 @@ export const AppProvider = ({ children }) => {
   }));
 
   const [route, setRoute] = useState(parseRoute);
+  const lastWorkspaceTabRef = useRef('lists');
 
   useEffect(() => {
-    const syncRoute = () => {
+    if (['lists', 'notes', 'crm', 'journal'].includes(route.name)) {
+      lastWorkspaceTabRef.current = route.name;
+    }
+  }, [route.name]);
+
+  useEffect(() => {
+    const syncRoute = (e) => {
+      if (window.innerWidth <= 960) {
+        setUi(prev => {
+          if (prev.drawer) return { ...prev, drawer: false };
+          if (prev.viewing && !prev.admin && !e?.state?.modalView) return { ...prev, viewing: false };
+          return prev;
+        });
+      }
       setRoute(parseRoute());
     };
     window.addEventListener('popstate', syncRoute);
@@ -1540,7 +1554,8 @@ export const AppProvider = ({ children }) => {
       foldMode,
       sidebarWidth,
       setSidebarWidth,
-      setSidebarWidthState
+      setSidebarWidthState,
+      lastWorkspaceTab: lastWorkspaceTabRef.current
     }}>
       {children}
     </AppContext.Provider>

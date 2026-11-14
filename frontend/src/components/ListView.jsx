@@ -417,7 +417,13 @@ export const ListView = () => {
     return (
       <>
         <div className="main-head">
-          <button className="icon-btn back" onClick={() => setUi(prev => ({ ...prev, viewing: false }))}>
+          <button className="icon-btn back" onClick={() => {
+            if (window.history.state?.modalView) {
+              window.history.back();
+            } else {
+              setUi(prev => ({ ...prev, viewing: false }));
+            }
+          }}>
             <BackIcon />
           </button>
         </div>
@@ -870,7 +876,13 @@ export const ListView = () => {
           className="icon-btn back"
           id="back"
           aria-label="Back to lists"
-          onClick={() => setUi(prev => ({ ...prev, viewing: false }))}
+          onClick={() => {
+            if (window.history.state?.modalView) {
+              window.history.back();
+            } else {
+              setUi(prev => ({ ...prev, viewing: false }));
+            }
+          }}
         >
           <BackIcon />
         </button>
