@@ -10,7 +10,6 @@ import { AdminPanel } from './components/AdminPanel';
 import { Login } from './components/Login';
 import { PublicNoteView } from './components/PublicNoteView';
 import { PrivacyModal } from './components/PrivacyModal';
-import { FoldSideRail } from './components/FoldSideRail';
 import './App.css';
 
 const Shell = () => {
@@ -122,7 +121,6 @@ const Shell = () => {
           <NoteView key={board.activeNoteId} />
         )}
       </main>
-      <FoldSideRail />
       <CrmModal />
       <PrivacyModal />
       {toast.visible && (
