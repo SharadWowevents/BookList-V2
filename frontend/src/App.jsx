@@ -13,7 +13,7 @@ import { PrivacyModal } from './components/PrivacyModal';
 import './App.css';
 
 const Shell = () => {
-  const { session, board, ui, toast, triggerUndo, route, navigate } = useApp();
+  const { session, board, ui, toast, triggerUndo, route, navigate, foldMode } = useApp();
 
   // 1. Root route: redirect to wowos.in immediately
   useEffect(() => {
@@ -93,8 +93,12 @@ const Shell = () => {
   }
 
   // 7. Main authenticated workspace view
+  const isDualVertical = foldMode === 'dual-vertical';
   return (
-    <div className={`app ${ui.viewing ? 'viewing' : ''} ${ui.collapsed ? 'collapsed' : ''}`}>
+    <div
+      className={`app ${ui.viewing ? 'viewing' : ''} ${ui.collapsed && !isDualVertical ? 'collapsed' : ''}`}
+      data-fold={foldMode}
+    >
       <Sidebar />
       <main className="main">
         {ui.admin && session?.role === 'admin' ? (

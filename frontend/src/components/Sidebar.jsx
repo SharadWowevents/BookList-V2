@@ -18,7 +18,7 @@ export const Sidebar = () => {
     showToast,
     crmMembers, crmFilter, setCrmFilter, isCrmAllowed,
     journalYears, journalViewMode, setJournalViewMode, setJournalCenter, setJournalMonth,
-    navigate, openPrivacyPolicy
+    navigate, openPrivacyPolicy, foldMode
   } = useApp();
 
   const isAdmin = session?.role === 'admin';
@@ -610,8 +610,8 @@ export const Sidebar = () => {
     );
   };
 
-  // Collapsed rail view
-  if (collapsed) {
+  // Collapsed rail view (not used on dual-screen Surface Duo, where Screen 1 is dedicated to sidebar)
+  if (collapsed && foldMode !== 'dual-vertical') {
     return (
       <aside className="side rail">
         <button

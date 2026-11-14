@@ -120,6 +120,80 @@ export const AppProvider = ({ children }) => {
     }
   });
 
+  // Dual-screen and foldable device detection (Surface Duo & Viewport Segments API)
+  const [foldMode, setFoldMode] = useState('none');
+
+  useEffect(() => {
+    const updateFoldMetrics = () => {
+      let mode = 'none';
+      const segments = window.visualViewport?.segments;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+
+      if (segments && segments.length === 2) {
+        if (segments[0].top === segments[1].top) {
+          mode = 'dual-vertical';
+          document.documentElement.style.setProperty('--fold-seg0-w', `${segments[0].width}px`);
+          document.documentElement.style.setProperty('--fold-seg1-w', `${segments[1].width}px`);
+          document.documentElement.style.setProperty('--fold-seam-w', `${Math.max(0, segments[1].left - segments[0].right)}px`);
+          document.documentElement.style.setProperty('--fold-seg1-x', `${segments[1].left}px`);
+        } else if (segments[0].left === segments[1].left) {
+          mode = 'dual-horizontal';
+          document.documentElement.style.setProperty('--fold-seg0-h', `${segments[0].height}px`);
+          document.documentElement.style.setProperty('--fold-seg1-h', `${segments[1].height}px`);
+          document.documentElement.style.setProperty('--fold-seam-h', `${Math.max(0, segments[1].top - segments[0].bottom)}px`);
+        }
+      } else {
+        const matchH = (typeof window.matchMedia === 'function') && (
+          window.matchMedia('(horizontal-viewport-segments: 2)').matches ||
+          window.matchMedia('(screen-spanning: single-fold-vertical)').matches
+        );
+        const matchV = (typeof window.matchMedia === 'function') && (
+          window.matchMedia('(vertical-viewport-segments: 2)').matches ||
+          window.matchMedia('(screen-spanning: single-fold-horizontal)').matches
+        );
+        const isDuoDualV = (w >= 1100 && w <= 1120) && (h >= 680 && h <= 760);
+        const isDuoDualH = (w >= 680 && w <= 760) && (h >= 1100 && h <= 1120);
+
+        if (matchH || isDuoDualV) {
+          mode = 'dual-vertical';
+          const seam = (w >= 1110) ? 34 : 28;
+          const segW = 540;
+          document.documentElement.style.setProperty('--fold-seg0-w', `${segW}px`);
+          document.documentElement.style.setProperty('--fold-seg1-w', `${segW}px`);
+          document.documentElement.style.setProperty('--fold-seam-w', `${seam}px`);
+          document.documentElement.style.setProperty('--fold-seg1-x', `${segW + seam}px`);
+        } else if (matchV || isDuoDualH) {
+          mode = 'dual-horizontal';
+          const seam = (h >= 1110) ? 34 : 28;
+          const segH = 540;
+          document.documentElement.style.setProperty('--fold-seg0-h', `${segH}px`);
+          document.documentElement.style.setProperty('--fold-seg1-h', `${segH}px`);
+          document.documentElement.style.setProperty('--fold-seam-h', `${seam}px`);
+        }
+      }
+
+      setFoldMode(mode);
+      if (mode !== 'none') {
+        document.documentElement.setAttribute('data-fold', mode);
+      } else {
+        document.documentElement.removeAttribute('data-fold');
+      }
+    };
+
+    updateFoldMetrics();
+    window.addEventListener('resize', updateFoldMetrics);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', updateFoldMetrics);
+    }
+    return () => {
+      window.removeEventListener('resize', updateFoldMetrics);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', updateFoldMetrics);
+      }
+    };
+  }, []);
+
   const [board, setBoardState] = useState(() => {
     if (!session) return starterBoard();
     try {
@@ -1406,7 +1480,8 @@ export const AppProvider = ({ children }) => {
       privacyModal,
       openPrivacyPolicy,
       closePrivacyPolicy,
-      acceptPrivacyPolicy
+      acceptPrivacyPolicy,
+      foldMode
     }}>
       {children}
     </AppContext.Provider>

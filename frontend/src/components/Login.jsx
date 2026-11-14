@@ -342,6 +342,48 @@ export const Login = () => {
 
   return (
     <div className="login">
+      {/* Dual-screen welcome panel on Microsoft Surface Duo & foldables */}
+      <div className="login-duo-side">
+        <div>
+          <div className="brand">My<span>Deepwork</span></div>
+        </div>
+        <p className="tag">
+          {pendingShareSid
+            ? 'Someone shared a list or note with you. Sign in to open it.'
+            : 'Lists, todos and notes in the order you want them. Star what matters and it stays on top.'}
+        </p>
+        <div className="duo-features">
+          <div className="duo-feature-item">
+            <span className="df-icon" aria-hidden="true">📝</span>
+            <div className="df-text">
+              <strong>Rich Notes & Ink</strong>
+              <span>Checklists, formatting, drawings & audio</span>
+            </div>
+          </div>
+          <div className="duo-feature-item">
+            <span className="df-icon" aria-hidden="true">✅</span>
+            <div className="df-text">
+              <strong>Interactive Tasks</strong>
+              <span>Voice input, priority stars & drag reorder</span>
+            </div>
+          </div>
+          <div className="duo-feature-item">
+            <span className="df-icon" aria-hidden="true">👥</span>
+            <div className="df-text">
+              <strong>Member CRM</strong>
+              <span>Keep track of clients, stages & due follow-ups</span>
+            </div>
+          </div>
+          <div className="duo-feature-item">
+            <span className="df-icon" aria-hidden="true">📖</span>
+            <div className="df-text">
+              <strong>Daily Journal</strong>
+              <span>Reflections, photos & yearly memories</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="login-card">
         <div>
           <div className="brand">My<span>Deepwork</span></div>
