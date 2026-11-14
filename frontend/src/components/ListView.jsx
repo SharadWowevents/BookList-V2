@@ -792,6 +792,7 @@ export const ListView = () => {
                 if (e.key === 'Enter') saveEdit(t.id);
                 if (e.key === 'Escape') setEditingTodoId(null);
               }}
+              style={{ width: '100%', boxSizing: 'border-box' }}
             />
           ) : (
             <span

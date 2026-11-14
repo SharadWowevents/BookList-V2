@@ -171,7 +171,7 @@ svg{display:block}
 .todo.done .box{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .todo-text{flex:1;min-width:0;font-size:1.3rem;line-height:1.35;padding:10px 4px;overflow-wrap:anywhere;cursor:text}
 .todo.done .todo-text{color:var(--muted);text-decoration:line-through;text-decoration-thickness:1.5px}
-.todo-edit{flex:1;min-width:0;font-size:1.3rem;padding:8px 10px;border-radius:10px;border:1.5px solid var(--accent);background:var(--bg);outline:none}
+.todo-edit{width:100%;min-width:0;align-self:stretch;box-sizing:border-box;font-size:1.3rem;padding:8px 10px;border-radius:10px;border:1.5px solid var(--accent);background:var(--bg);outline:none}
 .del{opacity:.55}
 .todo:hover .del{opacity:1}
 .done-toggle{display:flex;align-items:center;gap:8px;font-size:.75rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:16px 10px 8px}
@@ -653,7 +653,8 @@ body.modal-open{overflow:hidden}
 
 /* ---------- audio notes on todos ---------- */
 .todo-main{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;padding:4px 4px}
-.todo-main .todo-text{align-self:stretch;padding:6px 0}
+.todo-main .todo-text,.todo-main .todo-edit{align-self:stretch;width:100%;box-sizing:border-box}
+.todo-main .todo-text{padding:6px 0}
 .todo-audio{display:inline-flex;align-items:center;gap:8px;margin:0 0 6px;padding:5px 12px 5px 5px;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-weight:600;font-size:.9rem;font-variant-numeric:tabular-nums;border:none;cursor:pointer;user-select:none;-webkit-user-select:none;transition:background .15s}
 .todo-audio:hover{background:color-mix(in srgb,var(--accent) 18%,transparent)}
 .todo-audio .ta-ic{width:26px;height:26px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;flex:none}
