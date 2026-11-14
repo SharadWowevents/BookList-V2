@@ -7,7 +7,8 @@ import {
   acceptPrivacyPolicy,
   requestPasswordResetOtp,
   verifyPasswordResetOtp,
-  submitResetRequest
+  submitResetRequest,
+  getPresence
 } from '../controllers/authController.js';
 import { protect } from '../middleware/auth.js';
 
@@ -19,6 +20,7 @@ router.post('/reset-request', submitResetRequest);
 router.post('/forgot-password/request-otp', requestPasswordResetOtp);
 router.post('/forgot-password/verify-otp', verifyPasswordResetOtp);
 router.get('/me', protect, getMe);
+router.get('/presence', protect, getPresence);
 router.put('/profile', protect, updateProfile);
 router.post('/accept-privacy', protect, acceptPrivacyPolicy);
 

@@ -19,7 +19,8 @@ export const Sidebar = () => {
     crmMembers, crmFilter, setCrmFilter, isCrmAllowed,
     journalYears, journalViewMode, setJournalViewMode, setJournalCenter, setJournalMonth,
     navigate, openPrivacyPolicy, foldMode,
-    sidebarWidth, setSidebarWidth, setSidebarWidthState
+    sidebarWidth, setSidebarWidth, setSidebarWidthState,
+    onlineUsers, isWsConnected
   } = useApp();
 
   const isAdmin = session?.role === 'admin';
@@ -324,17 +325,25 @@ export const Sidebar = () => {
     reader.readAsDataURL(file);
   };
 
-  const renderAvatar = (cls = "") => {
-    if (photo) {
-      return (
-        <span className={`avatar ${cls}`}>
-          <img src={photo} alt="" />
-        </span>
-      );
-    }
-    const letter = (session?.name || 'Y').trim().charAt(0).toUpperCase();
+  const renderAvatar = (cls = "", withStatus = false) => {
     return (
-      <span className={`avatar ${cls}`}>{letter}</span>
+      <span className="person-avatar-wrap" style={{ display: 'inline-flex', position: 'relative' }}>
+        {photo ? (
+          <span className={`avatar ${cls}`}>
+            <img src={photo} alt="" />
+          </span>
+        ) : (
+          <span className={`avatar ${cls}`}>
+            {(session?.name || 'Y').trim().charAt(0).toUpperCase()}
+          </span>
+        )}
+        {withStatus && (
+          <span
+            className={`status-indicator-dot ${isWsConnected ? 'online' : 'offline'}`}
+            title={isWsConnected ? "Online now" : "Connecting…"}
+          />
+        )}
+      </span>
     );
   };
 
@@ -428,9 +437,15 @@ export const Sidebar = () => {
         </label>
         <div className="me-text">
           <span className="me-name">{session?.name || 'You'}</span>
-          {session?.username && (
-            <span style={{ fontSize: '.8rem', color: 'var(--muted)' }}>@{session.username}</span>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
+            {session?.username && (
+              <span style={{ fontSize: '.8rem', color: 'var(--muted)' }}>@{session.username}</span>
+            )}
+            <span className="presence-banner-pill">
+              <span className={`live-pulse-dot ${isWsConnected ? 'online' : 'offline'}`} />
+              {isWsConnected ? 'Online' : 'Connecting…'}
+            </span>
+          </div>
           <span className="photo-actions">
             <label className="text-btn" htmlFor="sidebarPhotoInput">
               {photo ? 'Change photo' : 'Add photo'}
@@ -560,6 +575,19 @@ export const Sidebar = () => {
       </div>
 
       <div className="menu-sep"></div>
+      <button
+        type="button"
+        className="menu-item"
+        onClick={() => {
+          setUi(prev => ({ ...prev, menu: false, onlineModal: true }));
+        }}
+      >
+        <UsersIcon /> Who's Online
+        <span className="online-badge-count">
+          <span className="live-pulse-dot" style={{ width: 6, height: 6 }} />
+          {onlineUsers.size || 1} online
+        </span>
+      </button>
       {isAdmin && (
         <button
           type="button"
@@ -1039,7 +1067,7 @@ export const Sidebar = () => {
           aria-label="Profile and settings"
           onClick={() => setUi(prev => ({ ...prev, menu: !prev.menu }))}
         >
-          {renderAvatar()}
+          {renderAvatar('', true)}
           <span className="me-text">
             <span className="me-name">{session?.name || 'You'}</span>
             <span className="me-sub">{session?.username ? `@${session.username}` : 'Saved locally'}</span>

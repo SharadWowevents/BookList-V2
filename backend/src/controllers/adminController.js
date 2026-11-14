@@ -20,6 +20,7 @@ import {
   sendResetRequestAcceptedEmail,
   sendResetRequestDeclinedEmail
 } from '../services/emailService.js';
+import { getOnlineUsernames } from '../services/websocketService.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -68,6 +69,7 @@ export const updateConfig = async (req, res) => {
 export const getUsers = async (req, res) => {
   try {
     const users = await User.find({}).sort({ createdAt: -1 });
+    const onlineSet = new Set(getOnlineUsernames().map(u => u.toLowerCase()));
     res.json({
       users: users.map(u => ({
         u: u.username,
@@ -79,6 +81,7 @@ export const getUsers = async (req, res) => {
         authType: u.authType,
         photo: u.photo || null,
         lastSeen: u.lastSeen,
+        isOnline: onlineSet.has(u.username.toLowerCase()),
         createdAt: u.createdAt
       }))
     });

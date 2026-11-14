@@ -75,7 +75,8 @@ export const authAPI = {
   submitResetRequest: (data) => request('/auth/reset-request', {
     method: 'POST',
     body: JSON.stringify(data)
-  })
+  }),
+  getPresence: () => request('/auth/presence')
 };
 
 export const boardAPI = {

@@ -8,6 +8,7 @@ import { PasswordResetOtp } from '../models/PasswordResetOtp.js';
 import { ResetRequest } from '../models/ResetRequest.js';
 import { sendPasswordResetOtpEmail } from '../services/emailService.js';
 import { recordLog } from '../services/auditLogService.js';
+import { getOnlineUsernames, getAllUsersPresence } from '../services/websocketService.js';
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'mydeepwork_secret', {
@@ -533,5 +534,19 @@ export const submitResetRequest = async (req, res) => {
     res.status(500).json({ message: err.message || 'Error submitting reset query.' });
   }
 };
+
+export const getPresence = async (req, res) => {
+  try {
+    const users = await getAllUsersPresence();
+    res.json({
+      onlineUsers: getOnlineUsernames(),
+      users
+    });
+  } catch (err) {
+    console.error('getPresence error:', err);
+    res.status(500).json({ message: 'Error fetching presence info.' });
+  }
+};
+
 
 

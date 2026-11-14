@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { connectDB } from './config/db.js';
@@ -14,6 +15,7 @@ import journalRoutes from './routes/journalRoutes.js';
 import { setupMcpSseRoutes } from './mcp/sseHandler.js';
 import { setupOAuthRoutes } from './mcp/oauth.js';
 import { startAutoBackupScheduler } from './services/backupService.js';
+import { initWebSocketServer } from './services/websocketService.js';
 
 dotenv.config();
 
@@ -84,6 +86,9 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+initWebSocketServer(server);
+
+server.listen(PORT, () => {
   console.log(`[MyDeepwork Server] Running on http://localhost:${PORT}`);
 });

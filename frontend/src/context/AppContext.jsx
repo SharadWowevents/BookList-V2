@@ -250,7 +250,8 @@ export const AppProvider = ({ children }) => {
     publishing: false,
     admin: false,
     collapsed,
-    drawer: false
+    drawer: false,
+    onlineModal: false
   }));
 
   const [route, setRoute] = useState(parseRoute);
@@ -1417,6 +1418,169 @@ export const AppProvider = ({ children }) => {
     }
   }, [route, session, ingestShare]);
 
+  // ----------------------------------------------------
+  // REAL-TIME PRESENCE (WebSockets)
+  // ----------------------------------------------------
+  const [onlineUsers, setOnlineUsers] = useState(new Set());
+  const [presenceUsers, setPresenceUsers] = useState([]);
+  const [isWsConnected, setIsWsConnected] = useState(false);
+  const wsRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
+
+  const isUserOnline = useCallback((username) => {
+    if (!username) return false;
+    return onlineUsers.has(username.toLowerCase());
+  }, [onlineUsers]);
+
+  const getUserLastSeen = useCallback((username) => {
+    if (!username) return null;
+    const u = presenceUsers.find(item => (item.u || '').toLowerCase() === username.toLowerCase());
+    return u?.lastSeen || null;
+  }, [presenceUsers]);
+
+  useEffect(() => {
+    const token = getToken();
+    if (!session || !token) {
+      if (wsRef.current) {
+        try { wsRef.current.close(); } catch {}
+        wsRef.current = null;
+      }
+      setOnlineUsers(new Set());
+      setPresenceUsers([]);
+      setIsWsConnected(false);
+      return;
+    }
+
+    let isDisposed = false;
+
+    const connectWebSocket = () => {
+      if (isDisposed) return;
+      if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+        return;
+      }
+
+      try {
+        const loc = window.location;
+        const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${proto}//${loc.host}/api/ws?token=${encodeURIComponent(token)}`;
+        const socket = new WebSocket(wsUrl);
+        wsRef.current = socket;
+
+        socket.onopen = () => {
+          if (isDisposed) {
+            socket.close();
+            return;
+          }
+          setIsWsConnected(true);
+        };
+
+        socket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'presence:init') {
+              if (Array.isArray(data.onlineUsers)) {
+                setOnlineUsers(new Set(data.onlineUsers.map(u => u.toLowerCase())));
+              }
+              if (Array.isArray(data.users)) {
+                setPresenceUsers(data.users);
+              }
+            } else if (data.type === 'presence:change') {
+              const uLower = (data.username || '').toLowerCase();
+              setOnlineUsers(prev => {
+                const next = new Set(prev);
+                if (data.isOnline) {
+                  next.add(uLower);
+                } else {
+                  next.delete(uLower);
+                }
+                return next;
+              });
+
+              setPresenceUsers(prev => {
+                const existingIndex = prev.findIndex(item => (item.u || '').toLowerCase() === uLower);
+                if (existingIndex >= 0) {
+                  const updated = [...prev];
+                  updated[existingIndex] = {
+                    ...updated[existingIndex],
+                    isOnline: data.isOnline,
+                    lastSeen: data.lastSeen || new Date().toISOString()
+                  };
+                  return updated;
+                }
+                return [...prev, {
+                  u: data.username,
+                  name: data.name || data.username,
+                  photo: data.photo || null,
+                  isOnline: data.isOnline,
+                  lastSeen: data.lastSeen || new Date().toISOString()
+                }];
+              });
+            }
+          } catch (err) {
+            console.error('[WS Client] Message parse error:', err);
+          }
+        };
+
+        socket.onclose = () => {
+          setIsWsConnected(false);
+          wsRef.current = null;
+          if (!isDisposed && session && getToken()) {
+            reconnectTimeoutRef.current = setTimeout(connectWebSocket, 3000);
+          }
+        };
+
+        socket.onerror = (err) => {
+          console.warn('[WS Client] Socket error:', err);
+        };
+      } catch (err) {
+        console.warn('[WS Client] Failed to create WebSocket:', err);
+        if (!isDisposed && session && getToken()) {
+          reconnectTimeoutRef.current = setTimeout(connectWebSocket, 5000);
+        }
+      }
+    };
+
+    connectWebSocket();
+
+    // REST fallback/preload
+    authAPI.getPresence().then(res => {
+      if (res?.onlineUsers && Array.isArray(res.onlineUsers)) {
+        setOnlineUsers(new Set(res.onlineUsers.map(u => u.toLowerCase())));
+      }
+      if (res?.users && Array.isArray(res.users)) {
+        setPresenceUsers(res.users);
+      }
+    }).catch(() => {});
+
+    // Activity tracking on user interaction
+    let lastActivitySent = 0;
+    const handleUserActivity = () => {
+      const now = Date.now();
+      if (now - lastActivitySent > 60000 && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        lastActivitySent = now;
+        try {
+          wsRef.current.send(JSON.stringify({ type: 'activity', timestamp: now }));
+        } catch {}
+      }
+    };
+
+    window.addEventListener('pointerdown', handleUserActivity, { passive: true });
+    window.addEventListener('keydown', handleUserActivity, { passive: true });
+
+    return () => {
+      isDisposed = true;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (wsRef.current) {
+        try { wsRef.current.close(); } catch {}
+        wsRef.current = null;
+      }
+      window.removeEventListener('pointerdown', handleUserActivity);
+      window.removeEventListener('keydown', handleUserActivity);
+    };
+  }, [session]);
+
   const setSession = useCallback((sess) => {
     setSessionState(sess);
     if (sess) {
@@ -1465,6 +1629,13 @@ export const AppProvider = ({ children }) => {
   }, [ingestShare]);
 
   const signOut = useCallback((msg) => {
+    if (wsRef.current) {
+      try { wsRef.current.close(); } catch {}
+      wsRef.current = null;
+    }
+    setOnlineUsers(new Set());
+    setPresenceUsers([]);
+    setIsWsConnected(false);
     setToken(null);
     setSessionState(null);
     try { localStorage.removeItem('listbook:session'); } catch {}
@@ -1477,7 +1648,9 @@ export const AppProvider = ({ children }) => {
       sharing: false,
       publishing: false,
       admin: false,
-      collapsed: false
+      collapsed: false,
+      drawer: false,
+      onlineModal: false
     });
     setPhotoState(null);
     noteCacheRef.current = {};
@@ -1555,7 +1728,12 @@ export const AppProvider = ({ children }) => {
       sidebarWidth,
       setSidebarWidth,
       setSidebarWidthState,
-      lastWorkspaceTab: lastWorkspaceTabRef.current
+      lastWorkspaceTab: lastWorkspaceTabRef.current,
+      onlineUsers,
+      presenceUsers,
+      isUserOnline,
+      getUserLastSeen,
+      isWsConnected
     }}>
       {children}
     </AppContext.Provider>

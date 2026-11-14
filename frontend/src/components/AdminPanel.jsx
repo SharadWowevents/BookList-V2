@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { adminAPI } from '../services/api';
+import { formatLastOnline } from '../utils/constants';
 import {
   BackIcon, KeyIcon, PauseIcon, PlayIcon, TrashIcon, RefreshIcon,
   EyeIcon, CopyIcon, PencilIcon, XIcon, CrmIcon, UndoIcon,
@@ -42,7 +43,11 @@ const formatFullDate = (date) => {
 };
 
 export const AdminPanel = () => {
-  const { setUi, showToast, session, board, navigate, reloadBoard, saveNoteBody, loadCrmMembers, lastWorkspaceTab } = useApp();
+  const {
+    setUi, showToast, session, board, navigate, reloadBoard,
+    saveNoteBody, loadCrmMembers, lastWorkspaceTab,
+    onlineUsers, isUserOnline, getUserLastSeen
+  } = useApp();
 
   useEffect(() => {
     if (session?.role !== 'admin') {
@@ -60,6 +65,7 @@ export const AdminPanel = () => {
   // People Tab State
   const [requireLogin, setRequireLogin] = useState(false);
   const [teamUsers, setTeamUsers] = useState([]);
+  const [peopleStatusFilter, setPeopleStatusFilter] = useState('all'); // 'all' | 'online' | 'offline'
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
@@ -527,12 +533,17 @@ export const AdminPanel = () => {
     }
   };
 
+  const onlineCount = teamUsers.filter(u => isUserOnline(u.u)).length;
   const activeCount = teamUsers.filter(u => u.status === 'active').length;
-  const filteredUsers = teamUsers.filter(u =>
-    !searchQuery ||
-    u.u.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (u.name || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredUsers = teamUsers.filter(u => {
+    const matchesSearch = !searchQuery ||
+      u.u.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (u.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
+    if (peopleStatusFilter === 'online') return isUserOnline(u.u);
+    if (peopleStatusFilter === 'offline') return !isUserOnline(u.u);
+    return true;
+  });
 
   const filteredLogs = useMemo(() => {
     const q = (logSearch || '').trim().toLowerCase();
@@ -602,7 +613,7 @@ export const AdminPanel = () => {
             {activeTab === 'queries' && 'Reset Queries'}
           </div>
           <div className="sub">
-            {activeTab === 'people' && (loading ? 'Loading…' : `${activeCount} active · ${teamUsers.length - activeCount} turned off`)}
+            {activeTab === 'people' && (loading ? 'Loading…' : `${onlineCount} online · ${activeCount} active · ${teamUsers.length - activeCount} turned off`)}
             {activeTab === 'backups' && `${backups.length} of 5 capacity · Auto-backup ${backupConfig.autoBackupEnabled ? `every ${backupConfig.intervalHours}h` : 'off'}`}
             {activeTab === 'logs' && `${logs.length} of 200 logs · Reversible audit trail`}
             {activeTab === 'queries' && (resetRequestsLoading ? 'Loading queries…' : `${pendingQueriesCount} pending review · ${resetRequests.length} total queries`)}
@@ -834,15 +845,40 @@ export const AdminPanel = () => {
                     <div className="card-title">Team</div>
                     <p className="card-note">Tap <b>CRM</b> to choose who can see the CRM. Admins always can.</p>
                   </div>
-                  {teamUsers.length > 4 && (
-                    <input
-                      className="input search"
-                      placeholder="Search people"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      aria-label="Search people"
-                    />
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <div className="people-filter-row">
+                      <button
+                        type="button"
+                        className={`people-filter-chip ${peopleStatusFilter === 'all' ? 'on' : ''}`}
+                        onClick={() => setPeopleStatusFilter('all')}
+                      >
+                        All ({teamUsers.length})
+                      </button>
+                      <button
+                        type="button"
+                        className={`people-filter-chip ${peopleStatusFilter === 'online' ? 'on' : ''}`}
+                        onClick={() => setPeopleStatusFilter('online')}
+                      >
+                        <span className="live-pulse-dot" /> Online ({onlineCount})
+                      </button>
+                      <button
+                        type="button"
+                        className={`people-filter-chip ${peopleStatusFilter === 'offline' ? 'on' : ''}`}
+                        onClick={() => setPeopleStatusFilter('offline')}
+                      >
+                        Offline ({teamUsers.length - onlineCount})
+                      </button>
+                    </div>
+                    {teamUsers.length > 4 && (
+                      <input
+                        className="input search"
+                        placeholder="Search people"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        aria-label="Search people"
+                      />
+                    )}
+                  </div>
                 </div>
 
                 {!teamUsers.length ? (
@@ -960,15 +996,24 @@ export const AdminPanel = () => {
                       );
                     }
 
+                    const userIsOnline = isUserOnline(u.u);
+                    const userLastSeen = u.lastSeen || getUserLastSeen(u.u);
+
                     return (
                       <div key={u.u} className={`person ${isOff ? 'off' : ''}`}>
-                        <span className="avatar sm">
-                          {u.photo ? (
-                            <img src={u.photo} alt={u.name || u.u} />
-                          ) : (
-                            (u.name || u.u).trim().charAt(0).toUpperCase()
-                          )}
-                        </span>
+                        <div className="person-avatar-wrap">
+                          <span className="avatar sm">
+                            {u.photo ? (
+                              <img src={u.photo} alt={u.name || u.u} />
+                            ) : (
+                              (u.name || u.u).trim().charAt(0).toUpperCase()
+                            )}
+                          </span>
+                          <span
+                            className={`status-indicator-dot ${userIsOnline ? 'online' : 'offline'}`}
+                            title={userIsOnline ? 'Online now' : userLastSeen ? `Last online: ${formatLastOnline(userLastSeen)}` : "Hasn't signed in yet"}
+                          />
+                        </div>
                         <div className="person-main">
                           <div className="person-name">
                             {u.name || u.u}{' '}
@@ -977,12 +1022,24 @@ export const AdminPanel = () => {
                                 You
                               </span>
                             )}
-                            <span className={`pill-state ${isOff ? 'is-off' : 'is-on'}`}>
-                              {isOff ? 'Turned off' : 'Active'}
-                            </span>
+                            {userIsOnline ? (
+                              <span className="pill-state is-online" style={{ fontSize: '0.72rem', padding: '2px 8px' }}>
+                                <span className="live-pulse-dot" /> Online
+                              </span>
+                            ) : (
+                              <span className={`pill-state ${isOff ? 'is-off' : 'is-on'}`}>
+                                {isOff ? 'Turned off' : 'Active'}
+                              </span>
+                            )}
                           </div>
                           <div className="person-sub">
-                            @{u.u}{u.email ? ` · ${u.email}` : ''} · {u.lastSeen ? 'Active recently' : "Hasn't signed in yet"}
+                            @{u.u}{u.email ? ` · ${u.email}` : ''} · {userIsOnline ? (
+                              <span className="live-online-text">Online now</span>
+                            ) : userLastSeen ? (
+                              <span title={new Date(userLastSeen).toLocaleString()}>Last online {formatLastOnline(userLastSeen)}</span>
+                            ) : (
+                              "Hasn't signed in yet"
+                            )}
                           </div>
                         </div>
                         <div className="person-actions">

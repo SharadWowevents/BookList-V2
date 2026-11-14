@@ -10,6 +10,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { Login } from './components/Login';
 import { PublicNoteView } from './components/PublicNoteView';
 import { PrivacyModal } from './components/PrivacyModal';
+import { OnlinePresenceModal } from './components/OnlinePresenceModal';
 import './App.css';
 
 const Shell = () => {
@@ -123,6 +124,7 @@ const Shell = () => {
       </main>
       <CrmModal />
       <PrivacyModal />
+      <OnlinePresenceModal />
       {toast.visible && (
         <div id="toast" className="toast">
           {toast.message}
