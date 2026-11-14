@@ -10,6 +10,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { Login } from './components/Login';
 import { PublicNoteView } from './components/PublicNoteView';
 import { PrivacyModal } from './components/PrivacyModal';
+import { FoldSideRail } from './components/FoldSideRail';
 import './App.css';
 
 const Shell = () => {
@@ -96,9 +97,17 @@ const Shell = () => {
   const isDualVertical = foldMode === 'dual-vertical';
   return (
     <div
-      className={`app ${ui.viewing ? 'viewing' : ''} ${ui.collapsed && !isDualVertical ? 'collapsed' : ''}`}
+      className={`app ${ui.viewing ? 'viewing' : ''} ${ui.collapsed && !isDualVertical ? 'collapsed' : ''} ${ui.drawer ? 'drawer-open' : ''}`}
+      data-tab={board.tab}
       data-fold={foldMode}
     >
+      {ui.drawer && (
+        <div
+          className="fold-drawer-backdrop"
+          onClick={() => setUi(prev => ({ ...prev, drawer: false }))}
+          aria-hidden="true"
+        />
+      )}
       <Sidebar />
       <main className="main">
         {ui.admin && session?.role === 'admin' ? (
@@ -113,6 +122,7 @@ const Shell = () => {
           <NoteView key={board.activeNoteId} />
         )}
       </main>
+      <FoldSideRail />
       <CrmModal />
       <PrivacyModal />
       {toast.visible && (

@@ -6,7 +6,8 @@ import { ACCENTS, uid, reorderSubset, PLANS, LABELS, crmMatches } from '../utils
 import {
   PlusIcon, StarIcon, GripIcon, PanelIcon, ListPlusIcon, NotePlusIcon,
   ListsIcon, NotesIcon, GearIcon, SunIcon, MoonIcon, MonitorIcon,
-  LogoutIcon, ShieldIcon, CameraIcon, EyeIcon, UsersIcon, CrmIcon, JournalIcon, ArchetypeIcon, MailIcon
+  LogoutIcon, ShieldIcon, CameraIcon, EyeIcon, UsersIcon, CrmIcon, JournalIcon, ArchetypeIcon, MailIcon,
+  XIcon
 } from './Icons';
 import { mmdd, today0, jHas, moodName } from './JournalView';
 
@@ -314,7 +315,7 @@ export const Sidebar = () => {
               [isList ? 'activeId' : 'activeNoteId']: item.id,
               tab: isList ? 'lists' : 'notes'
             });
-            setUi(prev => ({ ...prev, viewing: true, admin: false, confirm: false, sharing: false, publishing: false }));
+            setUi(prev => ({ ...prev, viewing: true, drawer: false, admin: false, confirm: false, sharing: false, publishing: false }));
             navigate(isList ? '/lists' : '/notes');
           }}
         >
@@ -570,7 +571,7 @@ export const Sidebar = () => {
             } else {
               setCrmFilter({ kind: fl.kind });
             }
-            setUi(prev => ({ ...prev, viewing: true }));
+            setUi(prev => ({ ...prev, viewing: true, drawer: false }));
           }}
         >
           {fl.label && fl.label !== 'none' && LABELS[fl.label] && (
@@ -641,7 +642,7 @@ export const Sidebar = () => {
           onClick={() => {
             setJournalViewMode('range');
             setJournalCenter(null);
-            setUi(prev => ({ ...prev, viewing: true }));
+            setUi(prev => ({ ...prev, viewing: true, drawer: false }));
           }}
         >
           <span className="list-name">Around today</span>
@@ -652,7 +653,7 @@ export const Sidebar = () => {
           onClick={() => {
             setJournalViewMode('month');
             setJournalMonth(null);
-            setUi(prev => ({ ...prev, viewing: true }));
+            setUi(prev => ({ ...prev, viewing: true, drawer: false }));
           }}
         >
           <span className="list-name">This month</span>
@@ -877,6 +878,17 @@ export const Sidebar = () => {
             >
               <PanelIcon />
             </button>
+            {ui.drawer && (
+              <button
+                type="button"
+                className="hbtn fold-drawer-close"
+                onClick={() => setUi(prev => ({ ...prev, drawer: false }))}
+                title="Close drawer"
+                aria-label="Close drawer"
+              >
+                <XIcon size={20} />
+              </button>
+            )}
           </div>
         </div>
 

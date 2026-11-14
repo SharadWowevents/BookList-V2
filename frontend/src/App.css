@@ -436,6 +436,135 @@ body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;
   .subbar .lbl{width:100%}
   .subbar .pill{padding:10px 14px}
   .main-head{padding-top:14px}
+  .note-scroll{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+}
+
+/* ---------- Foldable Phone Floating Side Rail & Off-Canvas Drawer ---------- */
+.fold-side-rail{display:none}
+.fold-drawer-backdrop{display:none}
+.fold-drawer-close{display:none}
+
+@media (max-width:760px){
+  .app.viewing .fold-side-rail{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:6px;
+    position:fixed;
+    right:max(10px,env(safe-area-inset-right,0px));
+    bottom:calc(20px + env(safe-area-inset-bottom,0px));
+    z-index:45;
+    padding:8px 6px;
+    border-radius:30px;
+    background:color-mix(in srgb,var(--panel) 84%,transparent);
+    backdrop-filter:blur(20px);
+    -webkit-backdrop-filter:blur(20px);
+    border:1px solid var(--line);
+    box-shadow:0 10px 32px rgba(0,0,0,.18),0 2px 8px rgba(0,0,0,.08);
+    transition:bottom .22s cubic-bezier(0.16,1,0.3,1),opacity .2s ease,transform .2s ease;
+  }
+  .app[data-tab="lists"] .fold-side-rail{
+    bottom:calc(88px + env(safe-area-inset-bottom,0px));
+  }
+  .fold-rail-btn{
+    width:44px;
+    height:44px;
+    border-radius:50%;
+    display:grid;
+    place-items:center;
+    color:var(--ink);
+    position:relative;
+    background:transparent;
+    transition:background .15s ease,color .15s ease,transform .12s ease;
+  }
+  .fold-rail-btn:hover{
+    background:var(--soft);
+  }
+  .fold-rail-btn:active{
+    transform:scale(0.92);
+  }
+  .fold-rail-btn.active{
+    background:var(--accent);
+    color:var(--accent-ink);
+    box-shadow:0 4px 14px color-mix(in srgb,var(--accent) 35%,transparent);
+  }
+  .fold-rail-badge{
+    position:absolute;
+    top:4px;
+    right:4px;
+    font-size:.65rem;
+    font-weight:700;
+    min-width:16px;
+    height:16px;
+    line-height:16px;
+    text-align:center;
+    border-radius:999px;
+    background:var(--accent);
+    color:var(--accent-ink);
+    padding:0 3px;
+  }
+  .fold-rail-btn.active .fold-rail-badge{
+    background:var(--ink);
+    color:var(--bg);
+  }
+  .fold-rail-sep{
+    width:22px;
+    height:1px;
+    background:var(--line);
+    margin:2px 0;
+    flex:none;
+  }
+  .fold-rail-add{
+    background:var(--soft);
+    color:var(--ink);
+  }
+  .fold-rail-add:hover{
+    background:var(--ink);
+    color:var(--bg);
+  }
+  .main.inking .fold-side-rail{
+    opacity:.25;
+    pointer-events:none;
+  }
+  .app.viewing.drawer-open .side{
+    display:flex!important;
+    position:fixed!important;
+    top:0!important;
+    left:0!important;
+    bottom:0!important;
+    width:min(340px,86vw)!important;
+    z-index:55!important;
+    box-shadow:6px 0 36px rgba(0,0,0,.35)!important;
+    border-right:1px solid var(--line)!important;
+    animation:foldDrawerSlideIn .22s cubic-bezier(0.16,1,0.3,1)!important;
+  }
+  .fold-drawer-backdrop{
+    display:block;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.45);
+    backdrop-filter:blur(2px);
+    -webkit-backdrop-filter:blur(2px);
+    z-index:54;
+    animation:foldBackdropFade .2s ease;
+  }
+  .fold-drawer-close{
+    display:grid;
+    place-items:center;
+  }
+}
+
+@keyframes foldDrawerSlideIn{
+  from{transform:translateX(-100%)}
+  to{transform:translateX(0)}
+}
+@keyframes foldBackdropFade{
+  from{opacity:0}
+  to{opacity:1}
+}
+
+[data-fold="dual-vertical"] .fold-side-rail{
+  display:none!important;
 }
 /* ---------- Foldable phones & tablets (Galaxy Z Fold, Pixel Fold, Surface Duo) ---------- */
 @media (max-width:380px){
