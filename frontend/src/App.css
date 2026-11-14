@@ -410,14 +410,17 @@ body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;
 .badge-undone{display:flex;align-items:center;gap:4px;font-size:.78rem;font-weight:600;padding:4px 8px;border-radius:999px;background:var(--soft);color:var(--muted)}
 
 
-/* ---------- phone ---------- */
-@media (max-width:760px){
+/* ---------- phone & fold phones ---------- */
+@media (max-width:960px){
   .app{grid-template-columns:minmax(0,1fr)}
   .side{border-right:0}
-  .app.viewing .side{display:none}
+  .app.viewing .side:not(.drawer-open){display:none}
   .app:not(.viewing) .main{display:none}
+  .app.collapsed{grid-template-columns:minmax(0,1fr)!important}
+  .app.collapsed .side:not(.drawer-open){display:none!important}
+  .app.collapsed .main{display:flex!important}
   .back{display:grid;margin-left:-10px;margin-top:4px}
-  .collapse-btn{display:none}
+  .collapse-btn{display:grid!important}
   .side-resizer{display:none!important}
   .side-head{padding-right:max(16px,env(safe-area-inset-right,0px))}
   .lists{padding-right:max(10px,env(safe-area-inset-right,0px))}
@@ -444,9 +447,11 @@ body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;
 .fold-drawer-backdrop{display:none}
 .fold-drawer-close{display:none}
 
-@media (max-width:760px){
-  .app.viewing .fold-side-rail{
-    display:flex;
+@media (max-width:960px){
+  .fold-side-rail,
+  .app.viewing .fold-side-rail,
+  .app.collapsed .fold-side-rail{
+    display:flex!important;
     flex-direction:column;
     align-items:center;
     gap:6px;
@@ -464,7 +469,7 @@ body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;
     transition:bottom .22s cubic-bezier(0.16,1,0.3,1),opacity .2s ease,transform .2s ease;
   }
   .app[data-tab="lists"] .fold-side-rail{
-    bottom:calc(88px + env(safe-area-inset-bottom,0px));
+    bottom:calc(88px + env(safe-area-inset-bottom,0px))!important;
   }
   .fold-rail-btn{
     width:44px;
@@ -526,6 +531,7 @@ body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;
     opacity:.25;
     pointer-events:none;
   }
+  .app.drawer-open .side,
   .app.viewing.drawer-open .side{
     display:flex!important;
     position:fixed!important;
@@ -561,10 +567,6 @@ body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;
 @keyframes foldBackdropFade{
   from{opacity:0}
   to{opacity:1}
-}
-
-[data-fold="dual-vertical"] .fold-side-rail{
-  display:none!important;
 }
 /* ---------- Foldable phones & tablets (Galaxy Z Fold, Pixel Fold, Surface Duo) ---------- */
 @media (max-width:380px){
@@ -603,7 +605,13 @@ body.is-resizing-sidebar,body.is-resizing-sidebar *{cursor:col-resize!important;
 
 /* Tablet / Unfolded Foldable (Galaxy Z Fold, Pixel Fold unfolded) */
 @media (min-width:761px) and (max-width:920px){
-  .app{grid-template-columns:minmax(260px,310px) minmax(0,1fr)}
+  .app:not(.collapsed):not(.viewing){grid-template-columns:minmax(260px,310px) minmax(0,1fr)}
+  .app.collapsed,
+  .app.viewing{grid-template-columns:minmax(0,1fr)!important}
+  .app.collapsed .side:not(.drawer-open),
+  .app.viewing .side:not(.drawer-open){display:none!important}
+  .app.collapsed .main,
+  .app.viewing .main{display:flex!important}
   .side-head{padding-inline:16px}
   .lists{padding-inline:8px}
   .main-head{padding-inline:16px}

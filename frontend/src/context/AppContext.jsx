@@ -238,7 +238,7 @@ export const AppProvider = ({ children }) => {
   });
 
   const [ui, setUi] = useState(() => ({
-    viewing: false,
+    viewing: true,
     adding: false,
     showDone: true,
     confirm: false,
@@ -246,7 +246,8 @@ export const AppProvider = ({ children }) => {
     sharing: false,
     publishing: false,
     admin: false,
-    collapsed
+    collapsed,
+    drawer: false
   }));
 
   const [route, setRoute] = useState(parseRoute);
@@ -271,18 +272,18 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     if (route.name === 'crm') {
       setBoardState(prev => prev.tab !== 'crm' ? { ...prev, tab: 'crm' } : prev);
-      setUi(prev => prev.admin ? { ...prev, admin: false } : prev);
+      setUi(prev => ({ ...prev, admin: false, viewing: true, drawer: false }));
     } else if (route.name === 'journal') {
       setBoardState(prev => prev.tab !== 'journal' ? { ...prev, tab: 'journal' } : prev);
-      setUi(prev => prev.admin ? { ...prev, admin: false } : prev);
+      setUi(prev => ({ ...prev, admin: false, viewing: true, drawer: false }));
     } else if (route.name === 'lists') {
       setBoardState(prev => prev.tab !== 'lists' ? { ...prev, tab: 'lists' } : prev);
-      setUi(prev => prev.admin ? { ...prev, admin: false } : prev);
+      setUi(prev => ({ ...prev, admin: false, viewing: true, drawer: false }));
     } else if (route.name === 'notes') {
       setBoardState(prev => prev.tab !== 'notes' ? { ...prev, tab: 'notes' } : prev);
-      setUi(prev => prev.admin ? { ...prev, admin: false } : prev);
+      setUi(prev => ({ ...prev, admin: false, viewing: true, drawer: false }));
     } else if (route.name === 'admin') {
-      setUi(prev => !prev.admin ? { ...prev, admin: true } : prev);
+      setUi(prev => (!prev.admin || !prev.viewing) ? { ...prev, admin: true, viewing: true } : prev);
     }
   }, [route.name]);
 

@@ -15,16 +15,6 @@ export const FoldSideRail = () => {
     showToast
   } = useApp();
 
-  // If spanned across two screens on Surface Duo, Screen 1 is dedicated to the full sidebar
-  if (foldMode === 'dual-vertical') {
-    return null;
-  }
-
-  // Only show when viewing content (or mobile single-screen view)
-  if (!ui.viewing) {
-    return null;
-  }
-
   const isListActive = board.tab === 'lists' && !ui.admin;
   const isNotesActive = board.tab === 'notes' && !ui.admin;
   const isJournalActive = board.tab === 'journal' && !ui.admin;

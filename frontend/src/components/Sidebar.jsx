@@ -874,7 +874,10 @@ export const Sidebar = () => {
               id="collapse"
               title="Collapse sidebar"
               aria-label="Collapse sidebar"
-              onClick={() => setCollapsed(true)}
+              onClick={() => {
+                setCollapsed(true);
+                setUi(prev => ({ ...prev, viewing: true, drawer: false }));
+              }}
             >
               <PanelIcon />
             </button>
